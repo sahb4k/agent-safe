@@ -7,14 +7,20 @@ from __future__ import annotations
 
 import json
 import tempfile
+from pathlib import Path
 
-from dashboard.backend.app import create_app
-from dashboard.backend.config import DashboardConfig
-from fastapi.testclient import TestClient
+import pytest
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+fastapi = pytest.importorskip("fastapi", reason="fastapi not installed")
+
+from dashboard.backend.app import create_app  # noqa: E402
+from dashboard.backend.config import DashboardConfig  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 def _make_event(
