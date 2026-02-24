@@ -267,14 +267,14 @@ Runner validates ticket
 
 **K8sExecutor**: Maps 17 actions to kubernetes Python client API calls. Uses AppsV1Api, CoreV1Api, AutoscalingV1Api, and NetworkingV1Api. Credential handling: kubeconfig file, bearer token, or in-cluster config. Multi-step drain-node (cordon → list pods → evict non-DaemonSet pods).
 
-**AwsExecutor**: Maps 12 actions to boto3 API calls across EC2, ECS, Lambda, S3, and IAM. Credential handling: access key + secret + session token, named profile, or boto3 default chain. Datetime serialization for JSON compatibility.
+**AwsExecutor**: Maps 13 actions to boto3 API calls across EC2, ECS, Lambda, S3, and IAM. Credential handling: access key + secret + session token, named profile, or boto3 default chain. Datetime serialization for JSON compatibility.
 
 Both executors are optional dependencies (`pip install agent-safe[k8s]` / `pip install agent-safe[aws]`). Lazy import guards ensure the core package works without them.
 
 | # | Decision | Chosen | Alternatives Considered | Rationale |
 |---|----------|--------|------------------------|-----------|
 | D31 | K8sExecutor client library | `kubernetes` Python client | kubectl subprocess, custom HTTP | Python client provides type safety, structured responses, and doesn't require kubectl binary. SubprocessExecutor remains for operators who prefer kubectl. |
-| D32 | AWS as second target environment | AWS (EC2, ECS, Lambda, S3, IAM) | Azure, GCP, Linux/SSH | AWS is the most-requested cloud by design partners. 12 curated actions cover the most common agent operations. Same executor protocol as K8s — no framework changes needed. |
+| D32 | AWS as second target environment | AWS (EC2, ECS, Lambda, S3, IAM) | Azure, GCP, Linux/SSH | AWS is the most-requested cloud by design partners. 13 curated actions cover the most common agent operations. Same executor protocol as K8s — no framework changes needed. |
 | D33 | Optional dependency strategy | Lazy import guards + extras | Hard dependencies, plugin system | `_check_kubernetes_available()` / `_check_boto3_available()` in `__init__`, not at module level. Core package stays lightweight. `[k8s]`, `[aws]`, `[all]` extras in pyproject.toml. |
 
 ## Future Architecture (Phase 2+)

@@ -131,6 +131,13 @@ AWS_ACTION_MAP: dict[str, AwsActionMapping] = {
         request_builder="_build_iam_attach_request",
         state_extractor="_extract_iam_policies",
     ),
+    "iam-detach-role-policy": AwsActionMapping(
+        service="iam",
+        execute_method="detach_role_policy",
+        state_method="list_attached_role_policies",
+        request_builder="_build_iam_detach_request",
+        state_extractor="_extract_iam_policies",
+    ),
 }
 
 
@@ -375,6 +382,12 @@ class AwsExecutor:
         return {"Bucket": params["bucket"], "Policy": params["policy"]}
 
     def _build_iam_attach_request(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "RoleName": params["role_name"],
+            "PolicyArn": params["policy_arn"],
+        }
+
+    def _build_iam_detach_request(self, params: dict[str, Any]) -> dict[str, Any]:
         return {
             "RoleName": params["role_name"],
             "PolicyArn": params["policy_arn"],

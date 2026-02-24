@@ -93,8 +93,8 @@ class TestAwsActionMapping:
         m = AWS_ACTION_MAP["iam-attach-role-policy"]
         assert m.service == "iam"
 
-    def test_all_12_actions_mapped(self) -> None:
-        assert len(AWS_ACTION_MAP) == 12
+    def test_all_13_actions_mapped(self) -> None:
+        assert len(AWS_ACTION_MAP) == 13
         for name, mapping in AWS_ACTION_MAP.items():
             assert isinstance(mapping, AwsActionMapping), f"{name} is not AwsActionMapping"
             assert mapping.service, f"{name} missing service"
@@ -278,6 +278,44 @@ class TestAwsExecutorExecute:
             },
         )
         assert result.status == ExecutionStatus.SUCCESS
+
+    @patch("agent_safe.runner.aws_executor.AwsExecutor._get_client")
+    def test_execute_ec2_terminate(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.terminate_instances.return_value = {
+            "TerminatingInstances": [
+                {"InstanceId": "i-123", "CurrentState": {"Name": "shutting-down"}},
+            ],
+        }
+        mock_get_client.return_value = mock_client
+
+        executor = _mock_executor()
+        result = executor.execute(
+            action="ec2-terminate-instance",
+            target="prod/api-instance",
+            params={"instance_id": "i-123", "region": "us-east-1"},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+        mock_client.terminate_instances.assert_called_once()
+
+    @patch("agent_safe.runner.aws_executor.AwsExecutor._get_client")
+    def test_execute_iam_detach_role_policy(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.detach_role_policy.return_value = {}
+        mock_get_client.return_value = mock_client
+
+        executor = _mock_executor()
+        result = executor.execute(
+            action="iam-detach-role-policy",
+            target="prod/my-role",
+            params={
+                "role_name": "my-role",
+                "policy_arn": "arn:aws:iam::123:policy/MyPolicy",
+                "region": "us-east-1",
+            },
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+        mock_client.detach_role_policy.assert_called_once()
 
     @patch("agent_safe.runner.aws_executor.AwsExecutor._get_client")
     def test_execute_client_error(self, mock_get_client: MagicMock) -> None:

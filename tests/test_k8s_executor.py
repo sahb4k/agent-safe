@@ -384,6 +384,155 @@ class TestK8sExecutorExecute:
 
     @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
     @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_delete_namespace(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_api.delete_namespace.return_value = MagicMock()
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="delete-namespace",
+            target="prod/old-ns",
+            params={"namespace": "old-ns"},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+        mock_api.delete_namespace.assert_called_once()
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_rollout_undo(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_result = MagicMock()
+        mock_result.metadata.name = "api"
+        mock_api.patch_namespaced_deployment.return_value = mock_result
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="rollout-undo",
+            target="dev/api",
+            params={"namespace": "dev", "deployment": "api"},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_get_secret(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_result = MagicMock()
+        mock_result.metadata.name = "db-creds"
+        mock_api.read_namespaced_secret.return_value = mock_result
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="get-secret",
+            target="dev/db-creds",
+            params={"namespace": "dev", "secret": "db-creds"},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_update_configmap(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_result = MagicMock()
+        mock_result.metadata.name = "app-config"
+        mock_api.patch_namespaced_config_map.return_value = mock_result
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="update-configmap",
+            target="dev/app-config",
+            params={"namespace": "dev", "configmap": "app-config", "data": {"key": "val"}},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+        mock_api.patch_namespaced_config_map.assert_called_once()
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_update_hpa_limits(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_result = MagicMock()
+        mock_result.metadata.name = "web-hpa"
+        mock_api.patch_namespaced_horizontal_pod_autoscaler.return_value = mock_result
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="update-hpa-limits",
+            target="dev/web-hpa",
+            params={
+                "namespace": "dev",
+                "hpa": "web-hpa",
+                "patch_json": '{"spec":{"maxReplicas":20}}',
+            },
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
+    def test_execute_apply_network_policy(
+        self, mock_get_api: MagicMock, mock_get_client: MagicMock,
+    ) -> None:
+        mock_api = MagicMock()
+        mock_result = MagicMock()
+        mock_result.metadata.name = "deny-all"
+        mock_api.create_namespaced_network_policy.return_value = mock_result
+        mock_get_api.return_value = mock_api
+        mock_get_client.return_value = MagicMock()
+
+        executor = K8sExecutor.__new__(K8sExecutor)
+        executor._kubeconfig = None
+        executor._context = None
+        executor._in_cluster = False
+
+        result = executor.execute(
+            action="apply-network-policy",
+            target="dev/deny-all",
+            params={"namespace": "dev", "policy": '{"kind":"NetworkPolicy"}'},
+        )
+        assert result.status == ExecutionStatus.SUCCESS
+        mock_api.create_namespaced_network_policy.assert_called_once()
+
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_client")
+    @patch("agent_safe.runner.k8s_executor.K8sExecutor._get_api_instance")
     def test_execute_scale_hpa(
         self, mock_get_api: MagicMock, mock_get_client: MagicMock,
     ) -> None:

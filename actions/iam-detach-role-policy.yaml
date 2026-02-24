@@ -1,0 +1,59 @@
+name: iam-detach-role-policy
+version: "1.0.0"
+description: >
+  Detach a managed IAM policy from an IAM role. This is a
+  critical action — revoking permissions from a role.
+
+parameters:
+  - name: role_name
+    type: string
+    required: true
+    description: IAM role name
+  - name: policy_arn
+    type: string
+    required: true
+    description: ARN of the managed policy to detach
+  - name: region
+    type: string
+    required: true
+    description: AWS region (IAM is global but region is required for credentials)
+
+risk_class: critical
+target_types:
+  - aws-iam-role
+
+prechecks:
+  - name: role-exists
+    description: Verify the IAM role exists
+  - name: policy-attached
+    description: Verify the managed policy is currently attached to the role
+
+reversible: true
+rollback_action: iam-attach-role-policy
+required_privileges:
+  - "iam:DetachRolePolicy"
+  - "iam:ListAttachedRolePolicies"
+tags:
+  - aws
+  - iam
+  - policy
+  - critical
+
+credentials:
+  type: aws
+  fields:
+    actions: ["iam:DetachRolePolicy", "iam:ListAttachedRolePolicies"]
+  ttl: 300
+
+state_fields:
+  - name: attached_policies
+    description: List of currently attached policy ARNs
+    type: array
+
+rollback_params:
+  role_name:
+    source: params.role_name
+  policy_arn:
+    source: params.policy_arn
+  region:
+    source: params.region

@@ -8,7 +8,7 @@ Core product: A policy decision sidecar — Action Registry + Policy Decision Po
 
 ## Key Decisions (Locked)
 - **Deployment**: Sidecar / library (runs in customer's environment, no cloud dependency)
-- **Target environment**: Kubernetes first + AWS (K8s actions + 12 AWS actions across EC2, ECS, Lambda, S3, IAM)
+- **Target environment**: Kubernetes first + AWS (K8s actions + 13 AWS actions across EC2, ECS, Lambda, S3, IAM)
 - **Enforcement model**: Advisory + ticket-based. PDP returns ALLOW/DENY/REQUIRE_APPROVAL. ALLOW decisions include signed execution tickets. Rate limiting + circuit breaker protect against misbehaving agents. Cumulative risk scoring escalates decisions when action chaining accumulates too much risk.
 - **GTM**: Open-source core (Apache 2.0), future paid tier (hosted dashboard, enterprise features)
 - **Tech stack**: Python (most agent frameworks are Python)

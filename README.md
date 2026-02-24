@@ -188,7 +188,7 @@ Each definition includes parameters with type constraints, risk class, reversibi
 
 ## AWS Action Catalogue
 
-Agent-Safe also ships with 12 curated AWS action definitions:
+Agent-Safe also ships with 13 curated AWS action definitions:
 
 | Category | Actions |
 |----------|---------|
@@ -196,7 +196,7 @@ Agent-Safe also ships with 12 curated AWS action definitions:
 | **ECS** | ecs-update-service, ecs-stop-task, ecs-scale-service |
 | **Lambda** | lambda-update-function-config, lambda-invoke-function |
 | **S3** | s3-delete-object, s3-put-bucket-policy |
-| **IAM** | iam-attach-role-policy |
+| **IAM** | iam-attach-role-policy, iam-detach-role-policy |
 
 Each definition includes parameters, risk class, credential scoping (IAM actions + resources), reversibility, and rollback params where applicable.
 
@@ -474,7 +474,7 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.9.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (12 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor. ~1000 tests passing.
+**Alpha** (v0.9.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor. 1007 tests passing.
 
 What's next:
 - Web dashboard (Phase 2.5)

@@ -27,6 +27,7 @@ from agent_safe.models import (
 )
 from agent_safe.runner.executor import DryRunExecutor, Executor
 from agent_safe.runner.runner import Runner, RunnerError
+from agent_safe.runner.subprocess_executor import SubprocessExecutor
 from agent_safe.sdk.client import AgentSafe, AgentSafeError
 from agent_safe.tickets.validator import TicketValidator
 
@@ -63,6 +64,7 @@ __all__ = [
     "RunnerError",
     "StateCapture",
     "StateFieldSpec",
+    "SubprocessExecutor",
     "TicketValidationResult",
     "TicketValidator",
     "__version__",

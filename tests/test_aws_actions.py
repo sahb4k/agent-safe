@@ -25,6 +25,7 @@ AWS_ACTION_NAMES = [
     "s3-delete-object",
     "s3-put-bucket-policy",
     "iam-attach-role-policy",
+    "iam-detach-role-policy",
 ]
 
 
@@ -40,8 +41,8 @@ class TestAwsActionLoading:
 
     def test_total_action_count(self) -> None:
         registry = load_registry(ACTIONS_DIR)
-        # 20 K8s + 12 AWS = 32 total
-        assert len(registry.list_actions()) == 32
+        # 20 K8s + 13 AWS = 33 total
+        assert len(registry.list_actions()) == 33
 
     def test_no_duplicate_names(self) -> None:
         registry = load_registry(ACTIONS_DIR)
@@ -102,6 +103,7 @@ class TestAwsActionSchema:
             "ec2-terminate-instance",
             "s3-put-bucket-policy",
             "iam-attach-role-policy",
+            "iam-detach-role-policy",
         ]
         for name in critical_actions:
             action = registry.get(name)

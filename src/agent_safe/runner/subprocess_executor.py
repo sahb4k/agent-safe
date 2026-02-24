@@ -8,6 +8,7 @@ via ``subprocess.run``.  Credential payloads containing a
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -211,46 +212,49 @@ class SubprocessExecutor:
                 executor_type="subprocess",
             )
 
-        kubeconfig = self._resolve_kubeconfig(credential)
-        args = build_kubectl_args(
-            template, params,
-            kubectl_path=self._kubectl_path,
-            kubeconfig=kubeconfig,
-            context=self._context,
-        )
-
+        kubeconfig, is_temp = self._resolve_kubeconfig(credential)
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=self._build_env(kubeconfig),
+            args = build_kubectl_args(
+                template, params,
+                kubectl_path=self._kubectl_path,
+                kubeconfig=kubeconfig,
+                context=self._context,
             )
-        except subprocess.TimeoutExpired:
+
+            try:
+                result = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    env=self._build_env(kubeconfig),
+                )
+            except subprocess.TimeoutExpired:
+                return ExecutionResult(
+                    status=ExecutionStatus.TIMEOUT,
+                    action=action,
+                    target=target,
+                    caller="",
+                    audit_id="",
+                    error=f"Command timed out after {timeout}s",
+                    executed_at=datetime.now(tz=UTC),
+                    executor_type="subprocess",
+                )
+
+            status = ExecutionStatus.SUCCESS if result.returncode == 0 else ExecutionStatus.FAILURE
             return ExecutionResult(
-                status=ExecutionStatus.TIMEOUT,
+                status=status,
                 action=action,
                 target=target,
                 caller="",
                 audit_id="",
-                error=f"Command timed out after {timeout}s",
+                output=result.stdout.strip(),
+                error=result.stderr.strip() if result.returncode != 0 else None,
                 executed_at=datetime.now(tz=UTC),
                 executor_type="subprocess",
             )
-
-        status = ExecutionStatus.SUCCESS if result.returncode == 0 else ExecutionStatus.FAILURE
-        return ExecutionResult(
-            status=status,
-            action=action,
-            target=target,
-            caller="",
-            audit_id="",
-            output=result.stdout.strip(),
-            error=result.stderr.strip() if result.returncode != 0 else None,
-            executed_at=datetime.now(tz=UTC),
-            executor_type="subprocess",
-        )
+        finally:
+            self._cleanup_temp_kubeconfig(kubeconfig, is_temp)
 
     def get_state(
         self,
@@ -264,36 +268,39 @@ class SubprocessExecutor:
             return {}
 
         resource = template.get_resource.format(**params)
-        kubeconfig = self._resolve_kubeconfig(credential)
-
-        args = [self._kubectl_path]
-        if kubeconfig:
-            args.extend(["--kubeconfig", kubeconfig])
-        if self._context:
-            args.extend(["--context", self._context])
-
-        args.extend(["get", resource, "-o", template.get_output])
-
-        if template.namespace_param and template.namespace_param in params:
-            args.extend(["-n", str(params[template.namespace_param])])
+        kubeconfig, is_temp = self._resolve_kubeconfig(credential)
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return {}
+            args = [self._kubectl_path]
+            if kubeconfig:
+                args.extend(["--kubeconfig", kubeconfig])
+            if self._context:
+                args.extend(["--context", self._context])
 
-        if result.returncode != 0:
-            return {}
+            args.extend(["get", resource, "-o", template.get_output])
 
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return {"raw": result.stdout.strip()}
+            if template.namespace_param and template.namespace_param in params:
+                args.extend(["-n", str(params[template.namespace_param])])
+
+            try:
+                result = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            except (subprocess.TimeoutExpired, OSError):
+                return {}
+
+            if result.returncode != 0:
+                return {}
+
+            try:
+                return json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return {"raw": result.stdout.strip()}
+        finally:
+            self._cleanup_temp_kubeconfig(kubeconfig, is_temp)
 
     def run_prechecks(
         self,
@@ -315,20 +322,35 @@ class SubprocessExecutor:
             ))
         return results
 
-    def _resolve_kubeconfig(self, credential: Credential | None) -> str | None:
-        """Get kubeconfig path from credential payload or constructor."""
+    def _resolve_kubeconfig(
+        self, credential: Credential | None,
+    ) -> tuple[str | None, bool]:
+        """Get kubeconfig path from credential payload or constructor.
+
+        Returns (path, is_temp) where is_temp indicates the file should
+        be cleaned up after use.
+        """
         if credential is not None and "kubeconfig" in credential.payload:
             kc = credential.payload["kubeconfig"]
             if isinstance(kc, str) and os.path.exists(kc):
-                return kc
+                return kc, False
             # Write to temp file
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".kubeconfig", delete=False,
             ) as tmp:
                 content = kc if isinstance(kc, str) else json.dumps(kc)
                 tmp.write(content)
-                return tmp.name
-        return self._kubeconfig
+                return tmp.name, True
+        return self._kubeconfig, False
+
+    @staticmethod
+    def _cleanup_temp_kubeconfig(
+        kubeconfig: str | None, is_temp: bool,
+    ) -> None:
+        """Remove a temp kubeconfig file if one was created."""
+        if is_temp and kubeconfig:
+            with contextlib.suppress(OSError):
+                os.unlink(kubeconfig)
 
     def _build_env(self, kubeconfig: str | None) -> dict[str, str] | None:
         """Build environment with KUBECONFIG if needed."""
