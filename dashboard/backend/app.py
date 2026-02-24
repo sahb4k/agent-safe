@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from agent_safe import __version__
 from dashboard.backend.config import DashboardConfig
 from dashboard.backend.routers import actions, activity, audit, health, policies
 from dashboard.backend.services.action_service import ActionService
@@ -27,7 +28,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Agent-Safe Dashboard",
-        version="0.10.0",
+        version=__version__,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )

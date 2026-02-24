@@ -21,6 +21,7 @@ from typing import Any
 
 import click
 
+from agent_safe import __version__
 from agent_safe.audit.logger import AuditLogger, verify_log
 from agent_safe.inventory.loader import InventoryError, load_inventory
 from agent_safe.models import DecisionResult
@@ -41,7 +42,7 @@ DEFAULT_AUDIT_LOG = "./audit.jsonl"
 
 
 @click.group()
-@click.version_option(package_name="agent-safe")
+@click.version_option(version=__version__)
 def cli() -> None:
     """Agent-Safe: governance and policy enforcement for AI agents."""
 
