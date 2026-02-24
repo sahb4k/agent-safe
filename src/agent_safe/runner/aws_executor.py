@@ -157,10 +157,12 @@ class AwsExecutor:
         self,
         region: str | None = None,
         profile: str | None = None,
+        endpoint_url: str | None = None,
     ) -> None:
         _check_boto3_available()
         self._region = region
         self._profile = profile
+        self._endpoint_url = endpoint_url
 
     def execute(
         self,
@@ -316,7 +318,10 @@ class AwsExecutor:
     ) -> Any:
         """Get a boto3 service client."""
         session = self._get_boto3_session(credential, region)
-        return session.client(service)
+        kwargs: dict[str, Any] = {}
+        if self._endpoint_url:
+            kwargs["endpoint_url"] = self._endpoint_url
+        return session.client(service, **kwargs)
 
     # --- Private: request builders ---
 

@@ -1,0 +1,25 @@
+# LocalStack for agent-safe integration tests.
+# Usage: docker compose -f infra/docker-compose.yaml up -d
+version: "3.8"
+
+services:
+  localstack:
+    image: localstack/localstack:3.4
+    container_name: agent-safe-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=ec2,ecs,s3,iam,lambda
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=0
+    volumes:
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  localstack-data:

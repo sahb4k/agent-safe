@@ -54,6 +54,7 @@ def _mock_executor() -> AwsExecutor:
     executor = AwsExecutor.__new__(AwsExecutor)
     executor._region = "us-east-1"
     executor._profile = None
+    executor._endpoint_url = None
     return executor
 
 

@@ -78,6 +78,12 @@ packages = ["src/agent_safe", "dashboard"]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
 filterwarnings = ["ignore::jwt.InsecureKeyLengthWarning"]
+markers = [
+    "integration: tests requiring real infrastructure (Kind/LocalStack)",
+    "kind: tests requiring a Kind Kubernetes cluster",
+    "localstack: tests requiring LocalStack AWS emulator",
+]
+addopts = "-m 'not integration'"
 
 [tool.ruff]
 target-version = "py311"

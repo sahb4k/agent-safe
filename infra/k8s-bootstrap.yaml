@@ -1,0 +1,58 @@
+# Kubernetes test resources for agent-safe integration tests.
+# Usage: kubectl apply -f infra/k8s-bootstrap.yaml --context kind-agent-safe-test
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-safe-inttest
+  labels:
+    purpose: integration-testing
+    managed-by: agent-safe
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx
+  namespace: agent-safe-inttest
+  labels:
+    app: test-nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-nginx
+  template:
+    metadata:
+      labels:
+        app: test-nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: agent-safe-inttest
+data:
+  app.mode: "testing"
+  log.level: "debug"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+  namespace: agent-safe-inttest
+type: Opaque
+stringData:
+  api-key: "inttest-secret-value"

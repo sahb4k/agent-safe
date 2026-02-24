@@ -102,6 +102,13 @@ Phase 3           → Agent Supervisor       (separate product decision)
   - [x] Cumulative risk escalation (risk meter, threshold escalation)
   - [x] Full execution pipeline (ticket → credentials → prechecks → state → execute → rollback)
   - [x] Rate limiting + circuit breaker (flood protection, per-caller isolation)
+- [x] **Integration Test Suite** (pre-publish confidence):
+  - [x] K8sExecutor tested against Kind (scale, restart, logs, delete-pod, state capture)
+  - [x] AwsExecutor tested against LocalStack (EC2 stop/start, S3 operations, IAM attach/detach)
+  - [x] SubprocessExecutor tested against Kind (kubectl operations)
+  - [x] Full pipeline: check() -> ticket -> credential -> execute (real) -> state -> audit
+  - [x] Docker Compose for LocalStack, Kind cluster config + bootstrap manifests
+  - [x] `@pytest.mark.integration` marker with skip-if-unavailable logic
 - **Team/Org Features** (paid tier):
   - Multi-cluster policy management (push policies to multiple sidecars)
   - Centralized audit aggregation (sidecars ship logs to dashboard)
