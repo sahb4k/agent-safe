@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-02-25
+
+CI pipeline and cross-platform test fixes.
+
+### Added
+
+- **GitHub Actions CI**: Lint + test matrix on Python 3.11, 3.12, 3.13 with pip caching and coverage reporting. Lints `src/`, `tests/`, `examples/`, and `dashboard/`.
+
+- **Trusted PyPI publishing**: `publish.yml` workflow triggers on GitHub releases. Builds, tests across all Python versions, and publishes to PyPI via trusted publishing (no API token needed).
+
+### Fixed
+
+- **Cross-platform test portability**: Replaced hardcoded Windows paths in all 24 test files with `Path(__file__).resolve().parent.parent`-based relative paths. Tests now pass on Linux, macOS, and Windows.
+
+- **Click 8.2+ compatibility**: Removed deprecated `mix_stderr=False` from `CliRunner()`. Changed `result.stderr` assertions to `result.output` for mixed-mode output.
+
+- **Dashboard test isolation**: Added `pytest.importorskip("fastapi")` guard so dashboard tests skip gracefully when FastAPI is not installed (e.g., in CI without `[dashboard]` extras).
+
 ## [0.12.0] - 2026-02-24
 
 Zero-config new user experience.

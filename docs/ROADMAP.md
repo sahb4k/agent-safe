@@ -9,7 +9,8 @@ Phase 1 (MVP)     → Policy Sidecar        (6-8 weeks)   ✅ COMPLETE
 Phase 1.5         → Execution Tickets      (4-6 weeks)   ✅ COMPLETE
 Phase 2.1         → Delegation + Creds     (4 weeks)     ✅ COMPLETE
 Phase 2           → Change Control         (8-12 weeks)  ✅ COMPLETE
-Phase 2.5         → Dashboard + SaaS tier  (6-8 weeks)  ← WE ARE HERE
+Phase 2.5 (free)  → Dashboard + DX         (6-8 weeks)   ✅ COMPLETE
+Phase 2.5 (paid)  → Team/Org Features                   ← WE ARE HERE
 Phase 3           → Agent Supervisor       (separate product decision)
 ```
 
@@ -86,9 +87,9 @@ Phase 3           → Agent Supervisor       (separate product decision)
 ---
 
 ## Phase 2.5: Dashboard + Commercial Tier — Weeks 24–32
-**Status**: In progress (v0.10.0 — free tier dashboard complete)
 
-**Goal**: Monetisation layer. A hosted control plane that adds centralized visibility without replacing the local PDP.
+### Free Tier (complete)
+**Status**: Complete (v0.12.1)
 
 **Deliverables**:
 - [x] **Web Dashboard** (read-only for free tier):
@@ -109,7 +110,21 @@ Phase 3           → Agent Supervisor       (separate product decision)
   - [x] Full pipeline: check() -> ticket -> credential -> execute (real) -> state -> audit
   - [x] Docker Compose for LocalStack, Kind cluster config + bootstrap manifests
   - [x] `@pytest.mark.integration` marker with skip-if-unavailable logic
-- **Team/Org Features** (paid tier):
+- [x] **Zero-Config New User Experience** (v0.12.0):
+  - [x] `agent-safe.yaml` config file with auto-discovery (walks parent directories)
+  - [x] `agent-safe init` scaffolds 9 files (config, .gitignore, 5 actions, policy, inventory)
+  - [x] `AgentSafe()` zero-arg SDK construction
+  - [x] Config-aware CLI (no `--registry`/`--policies`/`--signing-key` flags needed)
+  - [x] Auto-generated 256-bit HMAC signing key
+- [x] **CI/CD Pipeline** (v0.12.1):
+  - [x] GitHub Actions CI (lint + test matrix on 3.11/3.12/3.13)
+  - [x] Trusted PyPI publishing via GitHub releases
+  - [x] Cross-platform test portability (no hardcoded paths)
+
+### Paid Tier (next)
+**Status**: Not started
+
+- **Team/Org Features**:
   - Multi-cluster policy management (push policies to multiple sidecars)
   - Centralized audit aggregation (sidecars ship logs to dashboard)
   - Role-based access to dashboard

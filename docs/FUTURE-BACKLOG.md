@@ -6,17 +6,13 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ## Execution & Enforcement
 
-### Runner / Executor
+### ~~Runner / Executor~~ — COMPLETED (v0.8.0–v0.9.0, Phase 2)
 **What**: A sandboxed execution engine that runs actions on behalf of agents. Agent never touches the target directly.
-**Why cut**: Most complex and dangerous component. Building a secure, general-purpose executor is multi-quarter work. The advisory model eliminates the need for MVP.
-**When to reconsider**: Phase 2, after design partner validates the advisory model and asks for enforcement. Start with K8s-only Runner (K8s operator pattern).
-**Risk if delayed too long**: Advisory-only may not satisfy enterprise buyers who need provable enforcement. Phase 1.5 Execution Tickets are the bridge.
+**Status**: Implemented. Runner/Executor framework with `Executor` protocol, `DryRunExecutor`, `SubprocessExecutor` (kubectl), `K8sExecutor` (python-native, 17 K8s actions), and `AwsExecutor` (boto3, 13 AWS actions). Full lifecycle: ticket validation → credential resolution → prechecks → before-state → execute → after-state → audit.
 
-### Credential Gating
+### ~~Credential Gating~~ — COMPLETED (v0.3.0, Phase 2.1)
 **What**: Agents never hold target credentials. Credentials live in a vault (HashiCorp Vault, AWS Secrets Manager). Only the Runner retrieves them after PDP approval.
-**Why cut**: Requires vault integration, changes agent deployment model, adds operational complexity.
-**Status**: Design document completed in Phase 1.5 ([CREDENTIAL-SCOPING.md](CREDENTIAL-SCOPING.md)). Implementation deferred to Phase 2.
-**When to reconsider**: Phase 2, when Runner is built and enforcement becomes the priority.
+**Status**: Implemented. `CredentialVault` protocol with `EnvVarVault` dev/test backend. `CredentialResolver` resolves scoped credentials from vault after ticket validation. Template engine for credential scope fields. Design doc: [CREDENTIAL-SCOPING.md](CREDENTIAL-SCOPING.md).
 
 ### Enforcement Proxy
 **What**: Network-level enforcement — all agent traffic to targets routes through a proxy that checks PDP decisions inline.
@@ -27,45 +23,37 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ## Approval & Workflow
 
-### Human Approval Workflow
+### ~~Human Approval Workflow~~ — COMPLETED (v0.3.0, Phase 2.1)
 **What**: When PDP returns REQUIRE_APPROVAL, trigger a notification (Slack, webhook, email) and wait for human response.
-**Why cut**: UX + integration work with no core IP. The PDP returns the decision; handling it is the caller's job in MVP.
-**When to reconsider**: Phase 2. This is the first thing enterprise buyers will ask for after seeing the audit log.
-**Design note**: MVP PDP already returns REQUIRE_APPROVAL with a `request_id`. Phase 2 just needs to add: (a) webhook dispatch, (b) approval API endpoint, (c) Slack bot.
+**Status**: Implemented. `FileApprovalStore` with JSONL persistence. `ApprovalNotifier` protocol with webhook and Slack notifiers. SDK orchestration: `wait_for_approval()`, `resolve_approval()`. CLI: `approval list/show/approve/deny`.
 
-### Approval Policies
+### ~~Approval Policies~~ — COMPLETED (v0.3.0, Phase 2.1)
 **What**: Define who can approve what (role-based, target-based, risk-based). Two-person approval for critical actions.
-**Why cut**: Depends on approval workflow existing first.
-**When to reconsider**: Phase 2, alongside approval workflow.
+**Status**: Implemented alongside approval workflows. Delegation-aware policies control who can approve.
 
 ---
 
 ## Rollback & Safety
 
-### Rollback Pairing
+### ~~Rollback Pairing~~ — COMPLETED (v0.7.0, Phase 2)
 **What**: Every reversible action has a paired compensating action. `agent-safe rollback <audit_id>` executes the reverse.
-**Why cut**: Many actions aren't truly reversible. Promising rollback creates false confidence. Requires the Runner to execute rollback actions.
-**When to reconsider**: Phase 2, K8s only. K8s has good rollback semantics (rollout undo, uncordon, etc.). Start there.
-**Design note**: Action YAML schema already includes `reversible: bool`. Phase 2 adds `rollback_action: <action_name>` field.
+**Status**: Implemented. Declarative `rollback_params` mapping in action YAML. `generate_rollback()` and `check_rollback()` SDK methods. CLI: `rollback show` and `rollback check`. Rollback goes through full PDP evaluation.
 
-### Before/After State Capture
+### ~~Before/After State Capture~~ — COMPLETED (v0.6.0, Phase 2)
 **What**: Capture target state before and after action execution. Store diffs in audit log.
-**Why cut**: Requires talking to the K8s API to read state, which means the sidecar needs K8s credentials. Adds complexity to advisory model.
-**When to reconsider**: Phase 2, when the Runner exists and already has K8s access.
+**Status**: Implemented. Executors record state via SDK. State data (before, after, diff) stored as `state_capture` audit events. CLI: `audit show-state` and `audit state-coverage`.
 
-### Dry Run / Simulation Mode
-**What**: `agent-safe simulate <action>` — run the full PDP evaluation but also show what the action *would* do (K8s dry-run).
-**Why cut**: K8s dry-run is action-specific and requires API access. Nice-to-have, not core.
-**When to reconsider**: Phase 2, alongside Runner.
+### ~~Dry Run / Simulation Mode~~ — COMPLETED (v0.8.0, Phase 2)
+**What**: `agent-safe simulate <action>` — run the full PDP evaluation but also show what the action *would* do.
+**Status**: Implemented. `DryRunExecutor` simulates execution without side effects. CLI: `runner dry-run <token>`.
 
 ---
 
 ## Observability & Reporting
 
-### Dashboard / Web UI
+### ~~Dashboard / Web UI~~ — COMPLETED (v0.10.0, Phase 2.5)
 **What**: Read-only web UI showing audit log, action catalogue, policy matches, agent activity.
-**Why cut**: Frontend development is a separate skill set and time sink. CLI + log files are sufficient for MVP.
-**When to reconsider**: Phase 2.5. This is the monetization layer — free dashboard for OSS users, paid features for teams.
+**Status**: Implemented. FastAPI backend + React/TypeScript/Tailwind frontend. `agent-safe dashboard` CLI command. Optional dependency: `pip install agent-safe[dashboard]`.
 
 ### ~~External Audit Log Shipping~~ — COMPLETED (Phase 1.5, v0.2.0)
 **What**: Push audit logs to immutable external storage (S3 Object Lock, GCS retention lock, WORM).
@@ -85,10 +73,10 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ## Multi-Environment & Scale
 
-### Multi-Cloud Support (AWS, Azure, GCP)
+### Multi-Cloud Support (~~AWS~~, Azure, GCP)
 **What**: Action catalogues for cloud provider APIs (EC2, Lambda, RDS, Azure VMs, GCP Compute, etc.).
-**Why cut**: Massive surface area. Each cloud provider is essentially a separate product's worth of action definitions.
-**When to reconsider**: Post-MVP, driven by demand. Add one cloud provider at a time. AWS is likely first (biggest market).
+**AWS status**: COMPLETED (v0.9.0). 13 AWS actions (EC2, ECS, Lambda, S3, IAM) with AwsExecutor using boto3.
+**Azure/GCP**: Not started. Add driven by demand.
 
 ### Linux/SSH Target Support
 **What**: Action catalogue for classic sysadmin actions (service management, file ops, user management) via SSH.
@@ -109,10 +97,9 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 **Why cut**: OPA is powerful but adds dependency complexity. Custom engine is simpler, faster to iterate, and sufficient for MVP policy needs.
 **When to reconsider**: When policy complexity outgrows the custom engine (>50 rules, complex cross-references, data-dependent policies). Likely Phase 2.
 
-### Cumulative Risk Scoring
+### ~~Cumulative Risk Scoring~~ — COMPLETED (v0.4.0, Phase 2)
 **What**: Track action sequences per agent session. Escalate when cumulative risk exceeds a threshold (prevents privilege escalation via action chaining).
-**Why cut**: Requires stateful PDP (tracks sessions), which contradicts the stateless design. Complex to get right.
-**When to reconsider**: Phase 2. The audit log captures sequences; cumulative scoring can be computed from log data.
+**Status**: Implemented. Per-caller sliding time window with configurable risk scores, escalation threshold (ALLOW → REQUIRE_APPROVAL), and deny threshold (any → DENY). Post-policy escalation layer. Addresses Threat T7.
 
 ### Time-Window Policies
 **What**: Policies that vary by time (e.g., "allow prod restarts only during maintenance windows").
@@ -141,9 +128,9 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ## Developer Experience
 
-### ~~`agent-safe init` Scaffolding~~ — COMPLETED (Phase 1, v0.1.0)
+### ~~`agent-safe init` Scaffolding~~ — COMPLETED (v0.1.0, enhanced v0.12.0)
 **What**: `agent-safe init` generates a starter project with example actions, policies, inventory.
-**Status**: Implemented in MVP.
+**Status**: Implemented in MVP (v0.1.0). Enhanced in v0.12.0: scaffolds 9 files including `agent-safe.yaml` with auto-generated signing key, `.gitignore`, 5 diverse actions (LOW to HIGH risk, K8s + AWS), default policy, and inventory with 4 targets. Zero-config SDK and CLI work immediately after `init`.
 
 ### Action Marketplace / Community Registry
 **What**: A shared repository of community-contributed action definitions (like Ansible Galaxy or Terraform Registry).
