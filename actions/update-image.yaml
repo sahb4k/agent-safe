@@ -1,0 +1,49 @@
+name: update-image
+version: "1.0.0"
+description: >
+  Update the container image of a Kubernetes deployment.
+  Triggers a rolling update to the new image.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the deployment
+  - name: deployment
+    type: string
+    required: true
+    description: Name of the deployment to update
+  - name: container
+    type: string
+    required: true
+    description: Name of the container within the deployment
+  - name: image
+    type: string
+    required: true
+    description: "New container image (e.g. nginx:1.25)"
+    constraints:
+      min_length: 1
+      max_length: 255
+
+risk_class: high
+target_types:
+  - k8s-deployment
+
+prechecks:
+  - name: deployment-exists
+    description: Verify the deployment exists
+  - name: container-exists
+    description: Verify the container name exists in the deployment spec
+  - name: image-pullable
+    description: Verify the image exists and is pullable
+
+reversible: true
+rollback_action: rollout-undo
+required_privileges:
+  - "apps/deployments:patch"
+  - "apps/deployments:get"
+tags:
+  - kubernetes
+  - deployment
+  - image
+  - release

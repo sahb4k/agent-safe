@@ -1,0 +1,31 @@
+name: get-configmap
+version: "1.0.0"
+description: >
+  Read a Kubernetes ConfigMap. Read-only operation.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the ConfigMap
+  - name: configmap
+    type: string
+    required: true
+    description: Name of the ConfigMap
+
+risk_class: low
+target_types:
+  - k8s-configmap
+
+prechecks:
+  - name: configmap-exists
+    description: Verify the ConfigMap exists
+
+reversible: true
+rollback_action: null
+required_privileges:
+  - "configmaps:get"
+tags:
+  - kubernetes
+  - config
+  - read-only

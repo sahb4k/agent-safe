@@ -1,0 +1,48 @@
+name: scale-hpa
+version: "1.0.0"
+description: >
+  Update the min/max replica bounds of a Horizontal Pod Autoscaler.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the HPA
+  - name: hpa
+    type: string
+    required: true
+    description: Name of the HPA
+  - name: min_replicas
+    type: integer
+    required: true
+    description: Minimum number of replicas
+    constraints:
+      min_value: 1
+      max_value: 100
+  - name: max_replicas
+    type: integer
+    required: true
+    description: Maximum number of replicas
+    constraints:
+      min_value: 1
+      max_value: 500
+
+risk_class: medium
+target_types:
+  - k8s-hpa
+
+prechecks:
+  - name: hpa-exists
+    description: Verify the HPA exists
+  - name: min-max-valid
+    description: Verify min_replicas <= max_replicas
+
+reversible: true
+rollback_action: scale-hpa
+required_privileges:
+  - "autoscaling/horizontalpodautoscalers:patch"
+  - "autoscaling/horizontalpodautoscalers:get"
+tags:
+  - kubernetes
+  - hpa
+  - scaling

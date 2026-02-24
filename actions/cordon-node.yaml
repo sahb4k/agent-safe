@@ -1,0 +1,31 @@
+name: cordon-node
+version: "1.0.0"
+description: >
+  Mark a Kubernetes node as unschedulable. Existing pods continue running,
+  but no new pods will be scheduled on the node. Typically used before
+  maintenance or drain operations.
+
+parameters:
+  - name: node
+    type: string
+    required: true
+    description: Name of the node to cordon
+
+risk_class: high
+target_types:
+  - k8s-node
+
+prechecks:
+  - name: node-exists
+    description: Verify the node exists and is in Ready state
+  - name: capacity-check
+    description: Verify remaining cluster capacity is sufficient after cordoning
+
+reversible: true
+rollback_action: uncordon-node
+required_privileges:
+  - "core/nodes:patch"
+tags:
+  - kubernetes
+  - node
+  - maintenance

@@ -1,0 +1,76 @@
+# Target inventory — describes the infrastructure that agents can act on.
+# Each target has an environment and sensitivity class that the PDP
+# uses for context-aware policy decisions.
+
+targets:
+  # --- Production ---
+  - id: prod/api-server
+    type: k8s-deployment
+    environment: prod
+    sensitivity: critical
+    owner: platform-team
+    labels:
+      app: api-server
+      tier: backend
+
+  - id: prod/web-frontend
+    type: k8s-deployment
+    environment: prod
+    sensitivity: restricted
+    owner: frontend-team
+    labels:
+      app: web-frontend
+      tier: frontend
+
+  - id: prod/worker-node-01
+    type: k8s-node
+    environment: prod
+    sensitivity: critical
+    owner: infra-team
+    labels:
+      role: worker
+      zone: us-east-1a
+
+  - id: prod/payments-ns
+    type: k8s-namespace
+    environment: prod
+    sensitivity: critical
+    owner: payments-team
+    labels:
+      compliance: pci
+
+  # --- Staging ---
+  - id: staging/api-server
+    type: k8s-deployment
+    environment: staging
+    sensitivity: internal
+    owner: platform-team
+    labels:
+      app: api-server
+      tier: backend
+
+  - id: staging/web-frontend
+    type: k8s-deployment
+    environment: staging
+    sensitivity: public
+    owner: frontend-team
+    labels:
+      app: web-frontend
+      tier: frontend
+
+  # --- Dev ---
+  - id: dev/test-app
+    type: k8s-deployment
+    environment: dev
+    sensitivity: public
+    owner: dev-team
+    labels:
+      app: test-app
+
+  - id: dev/debug-pod
+    type: k8s-pod
+    environment: dev
+    sensitivity: public
+    owner: dev-team
+    labels:
+      purpose: debugging

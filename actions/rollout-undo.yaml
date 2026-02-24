@@ -1,0 +1,41 @@
+name: rollout-undo
+version: "1.0.0"
+description: >
+  Roll back a Kubernetes deployment to a previous revision.
+  Reverts the deployment spec to the specified revision.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the deployment
+  - name: deployment
+    type: string
+    required: true
+    description: Name of the deployment to rollback
+  - name: revision
+    type: integer
+    required: false
+    description: Specific revision to roll back to (omit for previous)
+    constraints:
+      min_value: 1
+
+risk_class: high
+target_types:
+  - k8s-deployment
+
+prechecks:
+  - name: deployment-exists
+    description: Verify the deployment exists
+  - name: revision-exists
+    description: Verify the target revision exists in history
+
+reversible: true
+rollback_action: rollout-undo
+required_privileges:
+  - "apps/deployments:patch"
+  - "apps/deployments:get"
+tags:
+  - kubernetes
+  - deployment
+  - rollback

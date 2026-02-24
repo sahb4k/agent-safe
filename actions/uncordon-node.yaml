@@ -1,0 +1,31 @@
+name: uncordon-node
+version: "1.0.0"
+description: >
+  Mark a Kubernetes node as schedulable again.
+  Reverses a previous cordon operation.
+
+parameters:
+  - name: node
+    type: string
+    required: true
+    description: Name of the node to uncordon
+
+risk_class: medium
+target_types:
+  - k8s-node
+
+prechecks:
+  - name: node-exists
+    description: Verify the node exists
+  - name: node-cordoned
+    description: Verify the node is currently cordoned
+
+reversible: true
+rollback_action: cordon-node
+required_privileges:
+  - "nodes:patch"
+  - "nodes:get"
+tags:
+  - kubernetes
+  - node
+  - scheduling

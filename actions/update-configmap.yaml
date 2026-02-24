@@ -1,0 +1,42 @@
+name: update-configmap
+version: "1.0.0"
+description: >
+  Update a Kubernetes ConfigMap with new data.
+  Existing keys are overwritten, new keys are added.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the ConfigMap
+  - name: configmap
+    type: string
+    required: true
+    description: Name of the ConfigMap to update
+  - name: key
+    type: string
+    required: true
+    description: ConfigMap data key to set
+  - name: value
+    type: string
+    required: true
+    description: Value to set for the key
+
+risk_class: medium
+target_types:
+  - k8s-configmap
+
+prechecks:
+  - name: configmap-exists
+    description: Verify the ConfigMap exists
+  - name: dependent-pods
+    description: Warn about pods that mount this ConfigMap
+
+reversible: true
+rollback_action: update-configmap
+required_privileges:
+  - "configmaps:patch"
+  - "configmaps:get"
+tags:
+  - kubernetes
+  - config

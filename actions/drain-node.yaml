@@ -1,0 +1,47 @@
+name: drain-node
+version: "1.0.0"
+description: >
+  Drain a Kubernetes node by evicting all pods.
+  Critical operation — cordons the node and evicts workloads.
+
+parameters:
+  - name: node
+    type: string
+    required: true
+    description: Name of the node to drain
+  - name: timeout
+    type: integer
+    required: false
+    description: Timeout in seconds for the drain operation
+    constraints:
+      min_value: 30
+      max_value: 600
+  - name: ignore_daemonsets
+    type: boolean
+    required: false
+    description: Whether to ignore DaemonSet pods during drain
+
+risk_class: critical
+target_types:
+  - k8s-node
+
+prechecks:
+  - name: node-exists
+    description: Verify the node exists
+  - name: workload-check
+    description: Warn about pods without controllers that will be lost
+  - name: pdb-check
+    description: Check PodDisruptionBudgets before draining
+
+reversible: false
+rollback_action: uncordon-node
+required_privileges:
+  - "nodes:patch"
+  - "nodes:get"
+  - "pods:list"
+  - "pods/eviction:create"
+tags:
+  - kubernetes
+  - node
+  - maintenance
+  - critical

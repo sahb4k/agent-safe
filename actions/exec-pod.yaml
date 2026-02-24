@@ -1,0 +1,44 @@
+name: exec-pod
+version: "1.0.0"
+description: >
+  Execute a command inside a running pod container.
+  High risk — arbitrary command execution in a live workload.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the pod
+  - name: pod
+    type: string
+    required: true
+    description: Name of the pod
+  - name: container
+    type: string
+    required: false
+    description: Container name (defaults to first container)
+  - name: command
+    type: array
+    required: true
+    description: "Command to execute as array (e.g. ['ls', '-la'])"
+
+risk_class: high
+target_types:
+  - k8s-pod
+
+prechecks:
+  - name: pod-running
+    description: Verify the pod is in Running phase
+  - name: command-allowlist
+    description: Check command against allowed command patterns
+
+reversible: false
+rollback_action: null
+required_privileges:
+  - "pods:get"
+  - "pods/exec:create"
+tags:
+  - kubernetes
+  - pod
+  - exec
+  - interactive

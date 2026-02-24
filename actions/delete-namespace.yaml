@@ -1,0 +1,35 @@
+name: delete-namespace
+version: "1.0.0"
+description: >
+  Delete a Kubernetes namespace and ALL resources within it.
+  Critical operation — destroys everything in the namespace.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Name of the namespace to delete
+    constraints:
+      pattern: "^[a-z][a-z0-9-]{0,62}$"
+
+risk_class: critical
+target_types:
+  - k8s-namespace
+
+prechecks:
+  - name: namespace-exists
+    description: Verify the namespace exists
+  - name: not-system-namespace
+    description: Reject deletion of kube-system, kube-public, default
+  - name: resource-inventory
+    description: List all resources that will be destroyed
+
+reversible: false
+rollback_action: null
+required_privileges:
+  - "namespaces:delete"
+tags:
+  - kubernetes
+  - namespace
+  - destructive
+  - critical

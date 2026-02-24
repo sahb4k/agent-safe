@@ -1,0 +1,46 @@
+name: update-hpa-limits
+version: "1.0.0"
+description: >
+  Update the target CPU/memory utilization thresholds of an HPA.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the HPA
+  - name: hpa
+    type: string
+    required: true
+    description: Name of the HPA
+  - name: target_cpu_percent
+    type: integer
+    required: false
+    description: Target CPU utilization percentage
+    constraints:
+      min_value: 1
+      max_value: 100
+  - name: target_memory_percent
+    type: integer
+    required: false
+    description: Target memory utilization percentage
+    constraints:
+      min_value: 1
+      max_value: 100
+
+risk_class: medium
+target_types:
+  - k8s-hpa
+
+prechecks:
+  - name: hpa-exists
+    description: Verify the HPA exists
+
+reversible: true
+rollback_action: update-hpa-limits
+required_privileges:
+  - "autoscaling/horizontalpodautoscalers:patch"
+  - "autoscaling/horizontalpodautoscalers:get"
+tags:
+  - kubernetes
+  - hpa
+  - scaling

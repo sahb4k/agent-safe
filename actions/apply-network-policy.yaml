@@ -1,0 +1,44 @@
+name: apply-network-policy
+version: "1.0.0"
+description: >
+  Apply a Kubernetes NetworkPolicy to restrict pod traffic.
+  Can block or allow ingress/egress traffic for pods matching
+  the policy selector.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace to apply the policy in
+  - name: policy_name
+    type: string
+    required: true
+    description: Name for the NetworkPolicy resource
+    constraints:
+      pattern: "^[a-z][a-z0-9-]{0,62}$"
+  - name: pod_selector
+    type: string
+    required: true
+    description: "Label selector for target pods (e.g. app=api)"
+
+risk_class: high
+target_types:
+  - k8s-namespace
+
+prechecks:
+  - name: namespace-exists
+    description: Verify the namespace exists
+  - name: cni-supports-netpol
+    description: Verify the CNI plugin supports NetworkPolicy
+  - name: affected-pods
+    description: List pods that will be affected by this policy
+
+reversible: true
+rollback_action: null
+required_privileges:
+  - "networking.k8s.io/networkpolicies:create"
+  - "networking.k8s.io/networkpolicies:patch"
+tags:
+  - kubernetes
+  - networking
+  - security

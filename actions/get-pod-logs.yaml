@@ -1,0 +1,46 @@
+name: get-pod-logs
+version: "1.0.0"
+description: >
+  Retrieve logs from a running or terminated pod container.
+  Read-only operation, but may expose sensitive application data.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the pod
+  - name: pod
+    type: string
+    required: true
+    description: Name of the pod
+  - name: container
+    type: string
+    required: false
+    description: Specific container name (required for multi-container pods)
+  - name: tail_lines
+    type: integer
+    required: false
+    default: 100
+    description: Number of recent log lines to retrieve
+    constraints:
+      min_value: 1
+      max_value: 10000
+
+risk_class: low
+target_types:
+  - k8s-pod
+
+prechecks:
+  - name: pod-exists
+    description: Verify the pod exists
+
+reversible: false
+rollback_action: null
+required_privileges:
+  - "core/pods:get"
+  - "core/pods/log:get"
+tags:
+  - kubernetes
+  - pod
+  - logs
+  - read-only

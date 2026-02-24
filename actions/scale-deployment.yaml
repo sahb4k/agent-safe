@@ -1,0 +1,42 @@
+name: scale-deployment
+version: "1.0.0"
+description: >
+  Scale a Kubernetes deployment to a specified replica count.
+  Can scale up or down.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the deployment
+  - name: deployment
+    type: string
+    required: true
+    description: Name of the deployment to scale
+  - name: replicas
+    type: integer
+    required: true
+    description: Target replica count
+    constraints:
+      min_value: 0
+      max_value: 100
+
+risk_class: medium
+target_types:
+  - k8s-deployment
+
+prechecks:
+  - name: deployment-exists
+    description: Verify the deployment exists
+  - name: hpa-check
+    description: Warn if HPA is active (scaling may be overridden)
+
+reversible: true
+rollback_action: scale-deployment
+required_privileges:
+  - "apps/deployments:patch"
+  - "apps/deployments:get"
+tags:
+  - kubernetes
+  - deployment
+  - scaling

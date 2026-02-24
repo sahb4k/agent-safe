@@ -1,0 +1,32 @@
+name: rollout-status
+version: "1.0.0"
+description: >
+  Check the rollout status of a Kubernetes deployment.
+  Read-only operation, no changes made.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the deployment
+  - name: deployment
+    type: string
+    required: true
+    description: Name of the deployment to check
+
+risk_class: low
+target_types:
+  - k8s-deployment
+
+prechecks:
+  - name: deployment-exists
+    description: Verify the deployment exists
+
+reversible: true
+rollback_action: null
+required_privileges:
+  - "apps/deployments:get"
+tags:
+  - kubernetes
+  - deployment
+  - read-only

@@ -1,0 +1,49 @@
+name: port-forward
+version: "1.0.0"
+description: >
+  Set up port forwarding to a pod. Opens a local port
+  that tunnels to a port on the target pod.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the pod
+  - name: pod
+    type: string
+    required: true
+    description: Name of the pod
+  - name: local_port
+    type: integer
+    required: true
+    description: Local port to listen on
+    constraints:
+      min_value: 1024
+      max_value: 65535
+  - name: remote_port
+    type: integer
+    required: true
+    description: Pod port to forward to
+    constraints:
+      min_value: 1
+      max_value: 65535
+
+risk_class: medium
+target_types:
+  - k8s-pod
+
+prechecks:
+  - name: pod-running
+    description: Verify the pod is in Running phase
+  - name: port-available
+    description: Verify local port is not already in use
+
+reversible: true
+rollback_action: null
+required_privileges:
+  - "pods:get"
+  - "pods/portforward:create"
+tags:
+  - kubernetes
+  - pod
+  - networking

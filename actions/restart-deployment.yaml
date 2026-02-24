@@ -1,0 +1,34 @@
+name: restart-deployment
+version: "1.0.0"
+description: >
+  Performs a rolling restart of a Kubernetes deployment by patching the
+  pod template annotation with a timestamp. All pods are cycled without downtime.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace containing the deployment
+  - name: deployment
+    type: string
+    required: true
+    description: Name of the deployment to restart
+
+risk_class: medium
+target_types:
+  - k8s-deployment
+
+prechecks:
+  - name: deployment-exists
+    description: Verify the deployment exists and is not paused
+  - name: minimum-replicas
+    description: Verify at least 2 replicas exist for zero-downtime restart
+
+reversible: false
+rollback_action: null
+required_privileges:
+  - "apps/deployments:patch"
+tags:
+  - kubernetes
+  - deployment
+  - restart

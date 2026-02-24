@@ -1,0 +1,82 @@
+# Default policies for Agent-Safe
+# Rules are evaluated by priority (highest first). First match wins.
+# If no rule matches, the decision is DENY (default-deny).
+
+rules:
+  # --- High-priority safety rules ---
+
+  - name: require-approval-critical-risk
+    description: Any action with critical effective risk requires human approval
+    priority: 1000
+    match:
+      risk_classes:
+        - critical
+    decision: require_approval
+    reason: Critical-risk actions always require human approval
+
+  - name: deny-delete-namespace-prod
+    description: Never allow namespace deletion in production
+    priority: 900
+    match:
+      actions:
+        - delete-namespace
+      targets:
+        environments:
+          - prod
+    decision: deny
+    reason: Production namespace deletion is prohibited
+
+  - name: require-approval-prod
+    description: All actions on production targets require approval
+    priority: 500
+    match:
+      targets:
+        environments:
+          - prod
+    decision: require_approval
+    reason: Production actions require explicit approval
+
+  # --- Medium-priority operational rules ---
+
+  - name: allow-read-actions-staging
+    description: Allow read-only actions on staging for any agent
+    priority: 200
+    match:
+      actions:
+        - get-pod-logs
+        - rollout-status
+        - get-configmap
+      targets:
+        environments:
+          - staging
+    decision: allow
+    reason: Read-only actions are safe on staging
+
+  - name: allow-deployer-staging
+    description: Deploy agents can manage staging deployments
+    priority: 100
+    match:
+      actions:
+        - restart-deployment
+        - scale-deployment
+        - delete-pod
+      targets:
+        environments:
+          - staging
+      callers:
+        roles:
+          - deployer
+    decision: allow
+    reason: Deployer agents are authorized for staging deployment management
+
+  # --- Low-priority catch-all rules ---
+
+  - name: allow-dev-all
+    description: All actions are allowed on dev targets
+    priority: 10
+    match:
+      targets:
+        environments:
+          - dev
+    decision: allow
+    reason: Development environment is unrestricted
