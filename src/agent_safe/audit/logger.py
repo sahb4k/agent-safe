@@ -242,6 +242,14 @@ class AuditLogger:
             and e.context.get("original_audit_id") == audit_id
         ]
 
+    def get_decision_event(self, audit_id: str) -> AuditEvent | None:
+        """Return the decision audit event with the given event_id."""
+        events = self.read_events()
+        for event in events:
+            if event.event_id == audit_id and event.event_type == "decision":
+                return event
+        return None
+
     def read_events(self) -> list[AuditEvent]:
         """Read all events from the log file."""
         if not self._path.exists():

@@ -1345,6 +1345,214 @@ def delegation_verify(
                 )
 
 
+# --- rollback commands ---
+
+
+@cli.group()
+def rollback() -> None:
+    """Rollback commands for reversible actions."""
+
+
+@rollback.command("show")
+@click.argument("audit_id")
+@click.option(
+    "--registry", default=DEFAULT_REGISTRY,
+    help="Path to actions directory",
+)
+@click.option(
+    "--policies", default=DEFAULT_POLICIES,
+    help="Path to policies directory",
+)
+@click.option(
+    "--inventory", default=DEFAULT_INVENTORY,
+    help="Path to inventory YAML file",
+)
+@click.option(
+    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    help="Path to audit log file",
+)
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def rollback_show(
+    audit_id: str,
+    registry: str,
+    policies: str,
+    inventory: str,
+    audit_log: str,
+    json_output: bool,
+) -> None:
+    """Show the rollback plan for a previous action."""
+    from agent_safe.sdk.client import AgentSafeError
+
+    inv_path: str | None = inventory if Path(inventory).exists() else None
+
+    try:
+        safe = AgentSafe(
+            registry=registry,
+            policies=policies,
+            inventory=inv_path,
+            audit_log=audit_log,
+        )
+    except Exception as e:
+        click.echo(f"Error loading config: {e}", err=True)
+        sys.exit(1)
+
+    try:
+        plan = safe.generate_rollback(audit_id)
+    except AgentSafeError as e:
+        click.echo(
+            click.style("ERROR", fg="red", bold=True)
+            + f" — {e}",
+        )
+        sys.exit(1)
+
+    if json_output:
+        click.echo(json.dumps(plan.model_dump(mode="json"), indent=2))
+    else:
+        click.echo(
+            click.style("Rollback Plan", fg="cyan", bold=True)
+            + f" for {audit_id}",
+        )
+        click.echo(
+            f"  original: {plan.original_action}"
+            f"  target={plan.original_target}"
+            f"  caller={plan.original_caller}",
+        )
+        click.echo(
+            f"  original params: "
+            f"{json.dumps(plan.original_params, default=str)}",
+        )
+        click.echo(
+            f"  before state:    "
+            f"{json.dumps(plan.before_state, default=str)}",
+        )
+        click.echo()
+        click.echo(
+            click.style("  rollback action: ", bold=True)
+            + plan.rollback_action,
+        )
+        click.echo(
+            f"  rollback params: "
+            f"{json.dumps(plan.rollback_params, default=str)}",
+        )
+        if plan.warnings:
+            click.echo()
+            for w in plan.warnings:
+                click.echo(
+                    "  " + click.style("warning:", fg="yellow") + f" {w}",
+                )
+        click.echo(
+            f"\n  Run: agent-safe rollback check {audit_id}",
+        )
+
+
+@rollback.command("check")
+@click.argument("audit_id")
+@click.option("--caller", default=None, help="Override the rollback caller")
+@click.option(
+    "--registry", default=DEFAULT_REGISTRY,
+    help="Path to actions directory",
+)
+@click.option(
+    "--policies", default=DEFAULT_POLICIES,
+    help="Path to policies directory",
+)
+@click.option(
+    "--inventory", default=DEFAULT_INVENTORY,
+    help="Path to inventory YAML file",
+)
+@click.option(
+    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    help="Path to audit log file",
+)
+@click.option(
+    "--signing-key", default=None,
+    help="HMAC signing key for execution tickets",
+)
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def rollback_check(
+    audit_id: str,
+    caller: str | None,
+    registry: str,
+    policies: str,
+    inventory: str,
+    audit_log: str,
+    signing_key: str | None,
+    json_output: bool,
+) -> None:
+    """Generate rollback plan and evaluate through PDP."""
+    from agent_safe.sdk.client import AgentSafeError
+
+    inv_path: str | None = inventory if Path(inventory).exists() else None
+
+    try:
+        safe = AgentSafe(
+            registry=registry,
+            policies=policies,
+            inventory=inv_path,
+            audit_log=audit_log,
+            signing_key=signing_key,
+        )
+    except Exception as e:
+        click.echo(f"Error loading config: {e}", err=True)
+        sys.exit(1)
+
+    try:
+        plan = safe.generate_rollback(audit_id)
+    except AgentSafeError as e:
+        click.echo(
+            click.style("ERROR", fg="red", bold=True)
+            + f" — {e}",
+        )
+        sys.exit(1)
+
+    decision = safe.check_rollback(audit_id, caller=caller)
+
+    if json_output:
+        data = {
+            "plan": plan.model_dump(mode="json"),
+            "decision": decision.model_dump(mode="json"),
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        click.echo(
+            click.style("Rollback Plan", fg="cyan", bold=True)
+            + f" for {audit_id}",
+        )
+        click.echo(
+            f"  {plan.original_action} → {plan.rollback_action}",
+        )
+        click.echo(
+            f"  rollback params: "
+            f"{json.dumps(plan.rollback_params, default=str)}",
+        )
+        if plan.warnings:
+            for w in plan.warnings:
+                click.echo(
+                    "  " + click.style("warning:", fg="yellow") + f" {w}",
+                )
+        click.echo()
+
+        color = {
+            DecisionResult.ALLOW: "green",
+            DecisionResult.DENY: "red",
+            DecisionResult.REQUIRE_APPROVAL: "yellow",
+        }.get(decision.result, "white")
+
+        click.echo(
+            click.style(decision.result.value.upper(), fg=color, bold=True)
+            + f" — {decision.reason}",
+        )
+        click.echo(f"  action: {decision.action}")
+        click.echo(f"  target: {decision.target}")
+        click.echo(f"  risk:   {decision.effective_risk}")
+        click.echo(f"  audit:  {decision.audit_id}")
+        if decision.ticket:
+            click.echo(f"  ticket: {decision.ticket.token[:40]}...")
+
+
+# --- helpers ---
+
+
 def _parse_vault_creds(
     vault_cred: tuple[str, ...],
 ) -> dict[str, dict[str, str]]:

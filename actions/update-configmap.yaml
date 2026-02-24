@@ -46,3 +46,16 @@ state_fields:
     description: Full ConfigMap data contents
     type: object
     required: true
+  - name: previous_value
+    description: Previous value of the updated key
+    type: string
+
+rollback_params:
+  namespace:
+    source: params.namespace
+  configmap:
+    source: params.configmap
+  key:
+    source: params.key
+  value:
+    source: before_state.previous_value

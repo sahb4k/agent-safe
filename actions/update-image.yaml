@@ -47,3 +47,17 @@ tags:
   - deployment
   - image
   - release
+
+state_fields:
+  - name: current_image
+    description: Current container image before update
+    type: string
+  - name: generation
+    description: Deployment metadata.generation
+    type: integer
+
+rollback_params:
+  namespace:
+    source: params.namespace
+  deployment:
+    source: params.deployment

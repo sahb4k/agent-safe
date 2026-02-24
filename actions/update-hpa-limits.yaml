@@ -44,3 +44,21 @@ tags:
   - kubernetes
   - hpa
   - scaling
+
+state_fields:
+  - name: target_cpu_percent
+    description: Current target CPU utilization percentage
+    type: integer
+  - name: target_memory_percent
+    description: Current target memory utilization percentage
+    type: integer
+
+rollback_params:
+  namespace:
+    source: params.namespace
+  hpa:
+    source: params.hpa
+  target_cpu_percent:
+    source: before_state.target_cpu_percent
+  target_memory_percent:
+    source: before_state.target_memory_percent

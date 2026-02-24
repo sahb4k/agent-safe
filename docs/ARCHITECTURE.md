@@ -243,6 +243,7 @@ The PDP design does not change. Cumulative risk is an additive post-policy layer
 | D20 | Risk tracker module location | `pdp/risk_tracker.py` | Extend rate limiter, inline in engine | Separate module follows rate limiter pattern for consistency. Different concern despite similar structure. |
 | D21 | Ticket ID as first-class audit field | Dedicated `ticket_id` field on AuditEvent | In `context` dict, in `params` | First-class field is queryable, filterable, and visible in audit exports. Same pattern as `correlation_id`. Compliance auditors need to answer "was there a ticket?" without parsing nested dicts. |
 | D22 | State capture as audit events | `state_capture` events in the same hash-chained audit log | Separate store, inline on Decision | Single source of truth for compliance. Hash chain covers state data too. `event_type` field distinguishes from decisions. Linked via `correlation_id` = original `audit_id`. |
+| D23 | Rollback parameter mapping | Declarative `rollback_params` in action YAML with `source:` syntax | Code-based mappers, convention-only | YAML declarations are auditable, version-controlled, and visible to operators. `params.<name>` and `before_state.<name>` sources cover all K8s rollback patterns. Convention fallback handles undeclared actions. Rollback goes through PDP — same policy enforcement as original action. |
 
 ## Future Architecture (Phase 2+)
 

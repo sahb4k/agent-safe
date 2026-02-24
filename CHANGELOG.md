@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-02-24
+
+Phase 2 -- Rollback Pairing.
+
+### Added
+
+- **Rollback Pairing**: Reversible actions can now generate compensating rollback plans from state capture data. The rollback itself goes through full PDP evaluation — no unaudited rollbacks.
+
+- **RollbackPlan model**: Structured output describing how to reverse a previous action, including original/rollback params, before_state, and advisory warnings.
+
+- **Declarative rollback_params in YAML**: Each reversible action declares how to derive rollback parameters using `source: params.<name>` or `source: before_state.<name>` dot-path syntax. Convention-based fallback when undeclared.
+
+- **RollbackPlanner**: Core engine that resolves rollback parameters from original decision params + before_state via declared mappings or convention-based fallback. Produces advisory warnings for missing fields.
+
+- **SDK rollback API**: `generate_rollback(audit_id)` returns a `RollbackPlan`. `check_rollback(audit_id, caller=None)` runs the rollback action through PDP with `correlation_id` linking to the original decision.
+
+- **New CLI commands**: `rollback show <audit_id>` displays the rollback plan. `rollback check <audit_id>` generates the plan and evaluates it through PDP. Both support `--json-output`.
+
+- **Action YAML extensions**: `rollback_params` added to 7 reversible actions (`scale-deployment`, `update-configmap`, `scale-hpa`, `update-hpa-limits`, `cordon-node`, `update-image`, `create-namespace`). `state_fields` added to 4 actions that previously lacked them.
+
+- **AuditLogger.get_decision_event()**: New helper to look up a decision event by audit_id.
+
+- **783 tests** (up from 689), covering rollback models, source resolution, planner (self-reversible, paired, convention, errors, warnings), SDK, CLI, and end-to-end flows.
+
 ## [0.6.0] - 2026-02-24
 
 Phase 2 -- Before/After State Capture.

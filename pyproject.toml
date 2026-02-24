@@ -1,6 +1,6 @@
 [project]
 name = "agent-safe"
-version = "0.6.0"
+version = "0.7.0"
 description = "A governance and policy enforcement layer for AI agents and non-human identities"
 readme = "README.md"
 license = "Apache-2.0"

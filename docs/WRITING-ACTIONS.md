@@ -94,6 +94,7 @@ tags:
 | `required_privileges` | list | `[]` | K8s RBAC privileges needed |
 | `tags` | list | `[]` | Searchable tags |
 | `state_fields` | list | `[]` | Expected fields for before/after state capture |
+| `rollback_params` | dict | `{}` | Rollback parameter mappings (source declarations) |
 
 ## State Capture Fields
 
@@ -120,6 +121,41 @@ Each state field has:
 - `required`: Whether executors should always capture this field (default `false`)
 
 State fields are used by the SDK's `record_after_state()` to report which declared fields were actually captured, enabling coverage analysis via `audit state-coverage`.
+
+## Rollback Parameter Mappings
+
+For reversible actions (`reversible: true`), declare how to derive rollback parameters using `rollback_params`. Each entry maps a rollback parameter name to a `source` that indicates where the value comes from:
+
+```yaml
+reversible: true
+rollback_action: scale-deployment
+
+rollback_params:
+  namespace:
+    source: params.namespace        # Copy from original action params
+  deployment:
+    source: params.deployment       # Copy from original action params
+  replicas:
+    source: before_state.replicas   # Restore from captured before-state
+```
+
+Source syntax:
+- `params.<name>` — reads from the original decision's action parameters
+- `before_state.<name>` — reads from the state capture's `before_state` dict
+
+If a source field is missing at rollback time, the planner adds a warning but still generates the plan. If `rollback_params` is not declared, the planner falls back to convention-based mapping (copy matching param names, override from before_state for self-reversible actions).
+
+For **paired rollbacks** (e.g., `cordon-node` → `uncordon-node`), only declare the params that the rollback action needs:
+
+```yaml
+# In cordon-node.yaml
+reversible: true
+rollback_action: uncordon-node
+
+rollback_params:
+  node:
+    source: params.node
+```
 
 ## Parameter Types
 

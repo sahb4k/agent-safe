@@ -29,3 +29,12 @@ tags:
   - kubernetes
   - node
   - maintenance
+
+state_fields:
+  - name: schedulable
+    description: Whether the node is currently schedulable
+    type: boolean
+
+rollback_params:
+  node:
+    source: params.node

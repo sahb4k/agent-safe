@@ -76,11 +76,7 @@ Phase 3           → Agent Supervisor       (separate product decision)
 - [x] **Cumulative Risk Scoring**: Per-caller session-level risk tracking with sliding time window. Configurable risk scores, escalation threshold (ALLOW → REQUIRE_APPROVAL), and deny threshold (any → DENY). Post-policy escalation layer. Thread-safe, injectable clock. Addresses Threat T7.
 - [x] **Ticket/Incident Linkage**: Actions reference an external ticket ID via `ticket_id` parameter. First-class audit field. Policy `require_ticket` condition controls per-rule ticket requirements. CLI `--ticket-id` option. Policy test cases support `ticket_id`.
 - [x] **Before/After State Capture**: Executors record target state before/after execution via SDK. State data (before, after, diff) stored as `state_capture` audit events linked to original decisions. Advisory `state_fields` in action YAML. CLI `audit show-state` and `audit state-coverage` commands.
-- **Rollback Pairing (K8s only first)**:
-  - Each reversible action has a paired rollback action
-  - `agent-safe rollback <audit_id>` — execute the compensating action for a previous action
-  - Only for actions marked `reversible: true`
-  - Rollback itself goes through PDP (no unaudited rollbacks)
+- [x] **Rollback Pairing (K8s only)**: Declarative `rollback_params` mapping in action YAML. `generate_rollback()` and `check_rollback()` SDK methods. `rollback show` and `rollback check` CLI commands. Convention-based fallback for undeclared mappings. Rollback goes through PDP with `correlation_id` linking to original decision.
 - **Runner (Single Backend — K8s only)**: Optional sandboxed executor for K8s actions. Runs as a controller/operator. Retrieves credentials via K8s RBAC (not vault yet). Validates execution tickets before acting.
 
 **Enforcement model**: Enforced for K8s (via Runner), advisory + tickets for other targets.

@@ -156,6 +156,7 @@ def agent_step(action, target, params):
 | **Cumulative Risk Scoring** | Per-caller session risk tracking. Escalates decisions when action chaining accumulates too much risk (T7 mitigation). |
 | **Ticket/Incident Linkage** | Link actions to external change tickets (JIRA, ServiceNow, etc.). Policies can require tickets. First-class audit field for compliance. |
 | **Before/After State Capture** | Record target state before and after action execution. Diffs stored in audit log for compliance. Advisory `state_fields` in action YAML. |
+| **Rollback Pairing** | Generate compensating rollback plans from state capture data. Declarative `rollback_params` in YAML. Rollback goes through PDP — no unaudited rollbacks. |
 | **Context-Aware Risk** | Risk = f(action risk, target sensitivity). A medium action on a critical target = critical effective risk. |
 
 ## Key Design Decisions
@@ -453,10 +454,9 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.6.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, and before/after state capture are complete and tested. 689 tests passing.
+**Alpha** (v0.7.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, and rollback pairing are complete and tested. 783 tests passing.
 
 What's next (Phase 2):
-- Rollback pairing (K8s only)
 - K8s Runner / Executor
 - Web dashboard (Phase 2.5)
 

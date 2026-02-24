@@ -50,6 +50,7 @@ from agent_safe.models import (
     DelegationResult,
     ExecutionTicket,
     RiskClass,
+    RollbackPlan,
     StateCapture,
 )
 from agent_safe.pdp.engine import PolicyDecisionPoint, load_policies
@@ -483,6 +484,82 @@ class AgentSafe:
             capture_duration_ms=ctx.get("capture_duration_ms"),
             state_fields_declared=ctx.get("state_fields_declared", []),
             state_fields_captured=ctx.get("state_fields_captured", []),
+        )
+
+    def generate_rollback(self, audit_id: str) -> RollbackPlan:
+        """Generate a rollback plan for a previously executed action.
+
+        Requires audit log to be configured. Looks up the original decision
+        event and its state capture, then uses the action registry's
+        rollback configuration to derive rollback parameters.
+
+        Args:
+            audit_id: The audit_id of the original decision to roll back.
+
+        Returns:
+            A RollbackPlan with the rollback action and derived parameters.
+
+        Raises:
+            AgentSafeError: If audit log is not configured, no decision found,
+                no state capture found, or the action is not reversible.
+        """
+        if self._audit is None:
+            raise AgentSafeError(
+                "Audit log is not configured. "
+                "Pass audit_log= to AgentSafe() to enable rollback."
+            )
+
+        original_event = self._audit.get_decision_event(audit_id)
+        if original_event is None:
+            raise AgentSafeError(
+                f"No decision event found for audit_id: {audit_id}"
+            )
+
+        state_capture = self.get_state_capture(audit_id)
+        if state_capture is None:
+            raise AgentSafeError(
+                f"No state capture found for audit_id: {audit_id}. "
+                "Record state with record_state() before generating rollback."
+            )
+
+        from agent_safe.rollback.planner import RollbackError, RollbackPlanner
+
+        planner = RollbackPlanner(self._registry)
+        try:
+            return planner.generate(state_capture, original_event)
+        except RollbackError as exc:
+            raise AgentSafeError(str(exc)) from exc
+
+    def check_rollback(
+        self,
+        audit_id: str,
+        caller: str | AgentIdentity | None = None,
+    ) -> Decision:
+        """Generate a rollback plan and run the rollback action through PDP.
+
+        Combines ``generate_rollback()`` with ``check()``. The rollback
+        action goes through full policy evaluation, audit logging, and
+        ticket issuance.
+
+        Args:
+            audit_id: The audit_id of the original decision to roll back.
+            caller: The agent requesting the rollback. Defaults to the
+                original caller from the decision.
+
+        Returns:
+            A Decision for the rollback action (ALLOW/DENY/REQUIRE_APPROVAL).
+
+        Raises:
+            AgentSafeError: If rollback plan cannot be generated.
+        """
+        plan = self.generate_rollback(audit_id)
+        effective_caller = caller if caller is not None else plan.rollback_caller
+        return self.check(
+            action=plan.rollback_action,
+            target=plan.rollback_target,
+            caller=effective_caller,
+            params=plan.rollback_params,
+            correlation_id=audit_id,
         )
 
     @property

@@ -46,3 +46,23 @@ tags:
   - kubernetes
   - hpa
   - scaling
+
+state_fields:
+  - name: min_replicas
+    description: Current minimum replica count
+    type: integer
+    required: true
+  - name: max_replicas
+    description: Current maximum replica count
+    type: integer
+    required: true
+
+rollback_params:
+  namespace:
+    source: params.namespace
+  hpa:
+    source: params.hpa
+  min_replicas:
+    source: before_state.min_replicas
+  max_replicas:
+    source: before_state.max_replicas

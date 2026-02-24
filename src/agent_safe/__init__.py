@@ -1,6 +1,6 @@
 """Agent-Safe: A governance and policy enforcement layer for AI agents."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from agent_safe.credentials.env_vault import EnvVarVault
 from agent_safe.credentials.resolver import CredentialResolver
@@ -14,6 +14,7 @@ from agent_safe.models import (
     DelegationLink,
     DelegationResult,
     ExecutionTicket,
+    RollbackPlan,
     StateCapture,
     StateFieldSpec,
     TicketValidationResult,
@@ -36,6 +37,7 @@ __all__ = [
     "DelegationResult",
     "EnvVarVault",
     "ExecutionTicket",
+    "RollbackPlan",
     "StateCapture",
     "StateFieldSpec",
     "TicketValidationResult",

@@ -391,6 +391,48 @@ agent-safe audit state-coverage ./audit.jsonl
 agent-safe audit show ./audit.jsonl --event-type state_capture
 ```
 
+## Rollback Pairing
+
+When a reversible action has state capture data, generate a rollback plan:
+
+```python
+# After executing and recording state for a scale-deployment...
+plan = safe.generate_rollback(decision.audit_id)
+print(f"Rollback: {plan.rollback_action}")
+print(f"Params: {plan.rollback_params}")
+# → Rollback: scale-deployment
+# → Params: {"namespace": "dev", "deployment": "api", "replicas": 2}
+
+# Run the rollback through PDP (no unaudited rollbacks)
+rb_decision = safe.check_rollback(decision.audit_id)
+if rb_decision.result.value == "ALLOW":
+    # Agent executes the rollback action
+    pass
+```
+
+Rollback from the CLI:
+
+```bash
+# Show the rollback plan for a decision
+agent-safe rollback show evt-abc123
+
+# Generate plan and evaluate through PDP
+agent-safe rollback check evt-abc123
+
+# JSON output
+agent-safe rollback show evt-abc123 --json-output
+```
+
+Rollback parameters are declared in action YAML using `source:` syntax:
+
+```yaml
+rollback_params:
+  namespace:
+    source: params.namespace      # Copy from original params
+  replicas:
+    source: before_state.replicas  # Restore from captured state
+```
+
 ## Audit Log
 
 Every `check()` call is logged to an append-only, hash-chained audit file:

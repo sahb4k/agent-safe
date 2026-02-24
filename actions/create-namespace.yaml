@@ -26,3 +26,7 @@ required_privileges:
 tags:
   - kubernetes
   - namespace
+
+rollback_params:
+  namespace:
+    source: params.namespace

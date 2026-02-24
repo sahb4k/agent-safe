@@ -61,3 +61,11 @@ state_fields:
   - name: ready_replicas
     description: Number of ready replicas
     type: integer
+
+rollback_params:
+  namespace:
+    source: params.namespace
+  deployment:
+    source: params.deployment
+  replicas:
+    source: before_state.replicas
