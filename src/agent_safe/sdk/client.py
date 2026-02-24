@@ -48,6 +48,7 @@ from agent_safe.models import (
     Decision,
     DecisionResult,
     DelegationResult,
+    ExecutionResult,
     ExecutionTicket,
     RiskClass,
     RollbackPlan,
@@ -561,6 +562,59 @@ class AgentSafe:
             params=plan.rollback_params,
             correlation_id=audit_id,
         )
+
+    def execute(
+        self,
+        ticket_token: str,
+        executor: Any = None,
+        timeout: float | None = None,
+    ) -> ExecutionResult:
+        """Execute a governed action by validating and running a ticket.
+
+        Convenience method that creates a Runner and executes. Requires
+        ``signing_key`` to be configured (for ticket validation).
+
+        Args:
+            ticket_token: The JWT token from an ExecutionTicket.
+            executor: Executor to use. Defaults to DryRunExecutor.
+                Must satisfy the Executor protocol (execute, get_state,
+                run_prechecks methods).
+            timeout: Execution timeout in seconds (default 300).
+
+        Returns:
+            ExecutionResult with status and output.
+
+        Raises:
+            AgentSafeError: If signing_key is not configured.
+        """
+        if self._ticket_issuer is None:
+            raise AgentSafeError(
+                "Signing key is not configured. "
+                "Pass signing_key= to AgentSafe() to enable execution."
+            )
+
+        from agent_safe.runner.executor import DryRunExecutor
+        from agent_safe.runner.runner import Runner
+        from agent_safe.tickets.validator import TicketValidator
+
+        if executor is None:
+            executor = DryRunExecutor()
+
+        validator = TicketValidator(
+            signing_key=self._ticket_issuer._signing_key,
+            issuer=self._ticket_issuer._issuer,
+        )
+
+        runner = Runner(
+            executor=executor,
+            ticket_validator=validator,
+            registry=self._registry,
+            credential_resolver=self._credential_resolver,
+            audit_logger=self._audit,
+            default_timeout=timeout or 300.0,
+        )
+
+        return runner.run(ticket_token)
 
     @property
     def credential_resolver(self) -> CredentialResolver | None:

@@ -327,6 +327,48 @@ class CredentialResult(BaseModel):
     ticket_nonce: str = ""
 
 
+# --- Execution Schema ---
+
+
+class ExecutionStatus(enum.StrEnum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    TIMEOUT = "timeout"
+    SKIPPED = "skipped"
+    ERROR = "error"
+
+
+class PreCheckResult(BaseModel):
+    """Outcome of a single precheck run by an executor."""
+
+    name: str
+    passed: bool
+    message: str = ""
+    advisory: bool = True
+
+
+class ExecutionResult(BaseModel):
+    """Outcome of running an action through the Runner.
+
+    Returned by ``Runner.run()`` and ``AgentSafe.execute()``.
+    """
+
+    status: ExecutionStatus
+    action: str
+    target: str
+    caller: str
+    audit_id: str
+    ticket_nonce: str = ""
+    output: str = ""
+    error: str | None = None
+    duration_ms: float | None = None
+    precheck_results: list[PreCheckResult] = Field(default_factory=list)
+    before_state: dict[str, Any] = Field(default_factory=dict)
+    after_state: dict[str, Any] = Field(default_factory=dict)
+    executed_at: datetime | None = None
+    executor_type: str = ""
+
+
 # --- Approval Request ---
 
 

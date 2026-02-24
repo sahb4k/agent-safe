@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-02-24
+
+Phase 2 -- Runner/Executor Framework.
+
+### Added
+
+- **Runner/Executor Framework**: Orchestrated governed action execution. The Runner validates execution tickets, resolves credentials, runs prechecks, captures before/after state, delegates to an Executor, audits the result, and revokes credentials — all in one lifecycle.
+
+- **Executor protocol**: `typing.Protocol` with `execute()`, `get_state()`, and `run_prechecks()` methods. Any object satisfying the protocol works as a backend.
+
+- **DryRunExecutor**: Built-in executor that simulates execution without side effects. Useful for testing, CI/CD dry-runs, and SDK integration tests.
+
+- **SubprocessExecutor**: Runs kubectl commands via `subprocess.run`. Maps 17 K8s action names to kubectl command templates. Handles kubeconfig from credential payloads, custom kubectl paths, and command timeouts.
+
+- **ExecutionResult model**: Structured outcome with status (SUCCESS/FAILURE/TIMEOUT/SKIPPED/ERROR), output, error, duration, precheck results, before/after state, and executor type.
+
+- **SDK execute()**: `safe.execute(ticket_token)` convenience method. Creates a Runner internally with the SDK's components. Defaults to DryRunExecutor.
+
+- **CLI runner commands**: `runner execute <token>` validates and executes. `runner dry-run <token>` shows what would happen. Both support `--executor`, `--json-output`, `--timeout`.
+
+- **AuditLogger.log_execution()**: Logs execution results as `execution` events in the hash-chained audit log.
+
+- **~87 new tests** across 4 files (test_runner.py, test_subprocess_executor.py, test_runner_sdk.py, test_runner_cli.py). **870 total tests**.
+
 ## [0.7.0] - 2026-02-24
 
 Phase 2 -- Rollback Pairing.

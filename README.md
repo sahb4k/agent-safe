@@ -157,6 +157,7 @@ def agent_step(action, target, params):
 | **Ticket/Incident Linkage** | Link actions to external change tickets (JIRA, ServiceNow, etc.). Policies can require tickets. First-class audit field for compliance. |
 | **Before/After State Capture** | Record target state before and after action execution. Diffs stored in audit log for compliance. Advisory `state_fields` in action YAML. |
 | **Rollback Pairing** | Generate compensating rollback plans from state capture data. Declarative `rollback_params` in YAML. Rollback goes through PDP — no unaudited rollbacks. |
+| **Runner/Executor** | Orchestrated action execution: validate ticket → resolve credentials → prechecks → state capture → execute → audit → revoke. Pluggable `Executor` protocol with DryRunExecutor and SubprocessExecutor (kubectl). |
 | **Context-Aware Risk** | Risk = f(action risk, target sensitivity). A medium action on a critical target = critical effective risk. |
 
 ## Key Design Decisions

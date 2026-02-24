@@ -1550,6 +1550,188 @@ def rollback_check(
             click.echo(f"  ticket: {decision.ticket.token[:40]}...")
 
 
+# --- runner group ---
+
+
+@cli.group()
+def runner() -> None:
+    """Runner/executor commands for governed action execution."""
+
+
+@runner.command("execute")
+@click.argument("token")
+@click.option(
+    "--signing-key", required=True,
+    help="HMAC signing key used to issue the ticket",
+)
+@click.option(
+    "--registry", default=DEFAULT_REGISTRY,
+    help="Path to actions directory",
+)
+@click.option(
+    "--executor", "executor_type", default="dry-run",
+    type=click.Choice(["dry-run", "subprocess"]),
+    help="Executor backend (default: dry-run)",
+)
+@click.option("--kubectl-path", default="kubectl", help="Path to kubectl binary")
+@click.option("--kubeconfig", default=None, help="Path to kubeconfig file")
+@click.option("--timeout", default=300.0, type=float, help="Execution timeout in seconds")
+@click.option(
+    "--vault-cred", multiple=True,
+    help="Static credential: TYPE=VALUE",
+)
+@click.option(
+    "--audit-log", default=None,
+    help="Path to audit log file (optional)",
+)
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def runner_execute(
+    token: str,
+    signing_key: str,
+    registry: str,
+    executor_type: str,
+    kubectl_path: str,
+    kubeconfig: str | None,
+    timeout: float,
+    vault_cred: tuple[str, ...],
+    audit_log: str | None,
+    json_output: bool,
+) -> None:
+    """Execute a governed action by validating a ticket."""
+    from agent_safe.runner.executor import DryRunExecutor, Executor
+    from agent_safe.runner.runner import Runner
+    from agent_safe.tickets.validator import TicketValidator
+
+    executor: Executor
+    if executor_type == "subprocess":
+        from agent_safe.runner.subprocess_executor import SubprocessExecutor
+
+        executor = SubprocessExecutor(
+            kubectl_path=kubectl_path,
+            kubeconfig=kubeconfig,
+        )
+    else:
+        executor = DryRunExecutor()
+
+    try:
+        validator = TicketValidator(signing_key=signing_key)
+        reg = load_registry(registry)
+    except Exception as e:
+        click.echo(f"Error loading config: {e}", err=True)
+        sys.exit(1)
+
+    # Optional credential resolver
+    credential_resolver = None
+    static_creds = _parse_vault_creds(vault_cred)
+    if static_creds:
+        from agent_safe.credentials.resolver import CredentialResolver
+        from agent_safe.credentials.vault import build_vault
+
+        vault = build_vault({"type": "env", "credentials": static_creds})
+        credential_resolver = CredentialResolver(registry=reg, vault=vault)
+
+    # Optional audit logger
+    audit_logger = None
+    if audit_log is not None:
+        audit_logger = AuditLogger(Path(audit_log))
+
+    runner_inst = Runner(
+        executor=executor,
+        ticket_validator=validator,
+        registry=reg,
+        credential_resolver=credential_resolver,
+        audit_logger=audit_logger,
+        default_timeout=timeout,
+    )
+
+    result = runner_inst.run(token)
+
+    if json_output:
+        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+    else:
+        color = {
+            "success": "green", "skipped": "cyan",
+            "failure": "red", "timeout": "yellow", "error": "red",
+        }.get(result.status.value, "white")
+
+        click.echo(
+            click.style(result.status.value.upper(), fg=color, bold=True)
+            + f" — {result.action} on {result.target}",
+        )
+        if result.output:
+            click.echo(f"  output: {result.output}")
+        if result.error:
+            click.echo(f"  error:  {result.error}")
+        if result.duration_ms is not None:
+            click.echo(f"  duration: {result.duration_ms:.0f}ms")
+        click.echo(f"  executor: {result.executor_type}")
+        if result.audit_id:
+            click.echo(f"  audit_id: {result.audit_id}")
+
+        if result.status.value not in ("success", "skipped"):
+            sys.exit(1)
+
+
+@runner.command("dry-run")
+@click.argument("token")
+@click.option(
+    "--signing-key", required=True,
+    help="HMAC signing key used to issue the ticket",
+)
+@click.option(
+    "--registry", default=DEFAULT_REGISTRY,
+    help="Path to actions directory",
+)
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def runner_dry_run(
+    token: str,
+    signing_key: str,
+    registry: str,
+    json_output: bool,
+) -> None:
+    """Show what would happen without executing."""
+    from agent_safe.runner.runner import Runner
+    from agent_safe.tickets.validator import TicketValidator
+
+    try:
+        validator = TicketValidator(signing_key=signing_key)
+        reg = load_registry(registry)
+    except Exception as e:
+        click.echo(f"Error loading config: {e}", err=True)
+        sys.exit(1)
+
+    from agent_safe.runner.executor import DryRunExecutor
+
+    runner_inst = Runner(
+        executor=DryRunExecutor(),
+        ticket_validator=validator,
+        registry=reg,
+    )
+
+    result = runner_inst.dry_run(token)
+
+    if json_output:
+        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+    else:
+        if result.status.value == "error":
+            click.echo(
+                click.style("ERROR", fg="red", bold=True)
+                + f" — {result.error}",
+            )
+            sys.exit(1)
+        else:
+            click.echo(
+                click.style("DRY-RUN", fg="cyan", bold=True)
+                + f" — {result.action} on {result.target}",
+            )
+            click.echo(f"  {result.output}")
+            if result.precheck_results:
+                click.echo("  prechecks:")
+                for pc in result.precheck_results:
+                    status = "PASS" if pc.passed else "FAIL"
+                    click.echo(f"    {status}: {pc.name}")
+
+
 # --- helpers ---
 
 

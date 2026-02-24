@@ -19,7 +19,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_safe.models import AuditEvent, Decision, DecisionResult, RiskClass, StateCapture
+from agent_safe.models import (
+    AuditEvent,
+    Decision,
+    DecisionResult,
+    ExecutionResult,
+    RiskClass,
+    StateCapture,
+)
 
 if TYPE_CHECKING:
     from agent_safe.audit.shipper import AuditShipper
@@ -227,6 +234,66 @@ class AuditLogger:
                 "capture_duration_ms": state_capture.capture_duration_ms,
                 "state_fields_declared": state_capture.state_fields_declared,
                 "state_fields_captured": state_capture.state_fields_captured,
+            },
+        )
+
+        return self._write_event(event)
+
+    def log_execution(
+        self,
+        result: ExecutionResult,
+        timestamp: datetime | None = None,
+    ) -> AuditEvent:
+        """Log an action execution result as an audit event.
+
+        Uses the existing hash chain and shipping infrastructure.
+        The execution data is stored in the ``context`` field.
+
+        Args:
+            result: The ExecutionResult from a Runner execution.
+            timestamp: Override event timestamp (defaults to now).
+
+        Returns:
+            The created AuditEvent.
+        """
+        timestamp = timestamp or datetime.now(tz=UTC)
+
+        decision = (
+            DecisionResult.ALLOW
+            if result.status.value in ("success", "skipped")
+            else DecisionResult.DENY
+        )
+
+        event = AuditEvent(
+            event_id=f"evt-{uuid.uuid4().hex[:12]}",
+            timestamp=timestamp,
+            prev_hash=self._prev_hash,
+            event_type="execution",
+            action=result.action,
+            target=result.target,
+            caller=result.caller,
+            decision=decision,
+            reason=(
+                f"Execution {result.status.value}: "
+                f"{result.output or result.error or ''}"
+            ).rstrip(),
+            risk_class=RiskClass.LOW,
+            effective_risk=RiskClass.LOW,
+            correlation_id=result.audit_id,
+            context={
+                "type": "execution",
+                "original_audit_id": result.audit_id,
+                "status": result.status.value,
+                "output": result.output,
+                "error": result.error,
+                "duration_ms": result.duration_ms,
+                "executor_type": result.executor_type,
+                "ticket_nonce": result.ticket_nonce,
+                "before_state": result.before_state,
+                "after_state": result.after_state,
+                "precheck_results": [
+                    pc.model_dump(mode="json") for pc in result.precheck_results
+                ],
             },
         )
 

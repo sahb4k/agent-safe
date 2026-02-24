@@ -77,7 +77,7 @@ Phase 3           → Agent Supervisor       (separate product decision)
 - [x] **Ticket/Incident Linkage**: Actions reference an external ticket ID via `ticket_id` parameter. First-class audit field. Policy `require_ticket` condition controls per-rule ticket requirements. CLI `--ticket-id` option. Policy test cases support `ticket_id`.
 - [x] **Before/After State Capture**: Executors record target state before/after execution via SDK. State data (before, after, diff) stored as `state_capture` audit events linked to original decisions. Advisory `state_fields` in action YAML. CLI `audit show-state` and `audit state-coverage` commands.
 - [x] **Rollback Pairing (K8s only)**: Declarative `rollback_params` mapping in action YAML. `generate_rollback()` and `check_rollback()` SDK methods. `rollback show` and `rollback check` CLI commands. Convention-based fallback for undeclared mappings. Rollback goes through PDP with `correlation_id` linking to original decision.
-- **Runner (Single Backend — K8s only)**: Optional sandboxed executor for K8s actions. Runs as a controller/operator. Retrieves credentials via K8s RBAC (not vault yet). Validates execution tickets before acting.
+- [x] **Runner (Single Backend — K8s only)**: Runner/Executor framework with `Executor` protocol, `DryRunExecutor`, and `SubprocessExecutor` (kubectl). Runner orchestrates: ticket validation → credential resolution → prechecks → before-state → execute → after-state → audit → revoke. SDK `execute()` convenience method. CLI `runner execute` and `runner dry-run` commands.
 
 **Enforcement model**: Enforced for K8s (via Runner), advisory + tickets for other targets.
 
