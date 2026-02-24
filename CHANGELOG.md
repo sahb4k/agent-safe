@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-02-25
+
+Commercial tier Phase B: Multi-cluster registration and audit aggregation.
+
+### Added
+
+- **Cluster registration**: Register remote clusters via `POST /api/clusters/` — returns a one-time API key for sidecar authentication. SHA-256 hashed key storage, prefix-based display. Admin-only CRUD: list, get, deactivate clusters.
+
+- **DashboardShipper**: New `AuditShipper` implementation in the core library (`agent_safe.audit.dashboard_shipper`). Sidecars POST audit events to a central dashboard using stdlib `urllib.request` — zero new dependencies. Configurable via `build_shippers()` with `dashboard_url` and `dashboard_api_key` keys.
+
+- **Event ingestion endpoint**: `POST /api/clusters/ingest` accepts batches of audit events authenticated via cluster API key (Bearer token). Deduplication by `(cluster_id, event_id)`. Tracks `last_seen` timestamp per cluster.
+
+- **Aggregated audit views**: `GET /api/clusters/events` and `GET /api/clusters/{id}/events` with full filtering (event_type, action, target, risk_class, decision, date range) and pagination. `GET /api/clusters/stats` and `GET /api/clusters/{id}/stats` for per-cluster and aggregated statistics.
+
+- **SQLite migration v2**: `clusters` and `cluster_events` tables with foreign key constraints and indexes on `cluster_id` and `timestamp`.
+
+- **Clusters dashboard page**: React page with cluster registration form, cluster table (status, event count, last seen, API key prefix), and per-cluster event viewer.
+
+- **Team tier clusters**: "clusters" feature added to team tier (previously enterprise-only). Both team and enterprise tiers can now manage clusters.
+
+### Changed
+
+- Schema version bumped from 1 to 2 (migrations run automatically on startup).
+
 ## [0.13.0] - 2026-02-25
 
 Commercial tier Phase A: Dashboard authentication and compliance reports.

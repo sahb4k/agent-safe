@@ -18,6 +18,7 @@ from dashboard.backend.db.connection import Database
 from dashboard.backend.db.migrations import run_migrations
 from dashboard.backend.routers import actions, activity, audit, health, policies
 from dashboard.backend.routers import auth as auth_router
+from dashboard.backend.routers import clusters as clusters_router
 from dashboard.backend.routers import users as users_router
 from dashboard.backend.services.action_service import ActionService
 from dashboard.backend.services.activity_service import ActivityService
@@ -116,6 +117,14 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         report_svc = ReportService(audit_svc)
         reports_router.init_router(report_svc)
         app.include_router(reports_router.router)
+
+    # --- Cluster Router (paid tier) ---
+    if has_feature(config.tier, "clusters") and is_paid:
+        from dashboard.backend.clusters.service import ClusterService
+
+        cluster_svc = ClusterService(db)
+        clusters_router.init_router(cluster_svc, config.tier)
+        app.include_router(clusters_router.router)
 
     # --- Static files (built frontend) ---
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

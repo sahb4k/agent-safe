@@ -1,10 +1,11 @@
 """Agent-Safe: A governance and policy enforcement layer for AI agents."""
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 # Optional executor imports (don't crash if optional deps are missing)
 import contextlib
 
+from agent_safe.audit.dashboard_shipper import DashboardShipper
 from agent_safe.config import AgentSafeConfig, find_config, generate_signing_key, load_config
 from agent_safe.credentials.env_vault import EnvVarVault
 from agent_safe.credentials.resolver import CredentialResolver
@@ -51,6 +52,7 @@ __all__ = [
     "CredentialScope",
     "CredentialVault",
     "CredentialVaultError",
+    "DashboardShipper",
     "DelegationLink",
     "DelegationResult",
     "DryRunExecutor",

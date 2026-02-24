@@ -27,6 +27,48 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        2,
+        """
+        CREATE TABLE IF NOT EXISTS clusters (
+            cluster_id     TEXT PRIMARY KEY,
+            name           TEXT UNIQUE NOT NULL,
+            description    TEXT NOT NULL DEFAULT '',
+            api_key_hash   TEXT NOT NULL,
+            api_key_prefix TEXT NOT NULL,
+            is_active      INTEGER NOT NULL DEFAULT 1,
+            created_at     TEXT NOT NULL,
+            last_seen      TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS cluster_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            cluster_id     TEXT NOT NULL REFERENCES clusters(cluster_id),
+            event_id       TEXT NOT NULL,
+            timestamp      TEXT NOT NULL,
+            event_type     TEXT NOT NULL DEFAULT 'decision',
+            action         TEXT NOT NULL,
+            target         TEXT NOT NULL,
+            caller         TEXT NOT NULL,
+            decision       TEXT NOT NULL,
+            reason         TEXT NOT NULL DEFAULT '',
+            risk_class     TEXT NOT NULL DEFAULT 'low',
+            effective_risk TEXT NOT NULL DEFAULT 'low',
+            policy_matched TEXT,
+            correlation_id TEXT,
+            ticket_id      TEXT,
+            params         TEXT NOT NULL DEFAULT '{}',
+            context        TEXT,
+            ingested_at    TEXT NOT NULL,
+            UNIQUE(cluster_id, event_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cluster_events_cluster
+            ON cluster_events(cluster_id);
+        CREATE INDEX IF NOT EXISTS idx_cluster_events_timestamp
+            ON cluster_events(timestamp);
+        """,
+    ),
 ]
 
 

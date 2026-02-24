@@ -9,6 +9,7 @@ import Actions from './pages/Actions'
 import ActionDetail from './pages/ActionDetail'
 import Policies from './pages/Policies'
 import Activity from './pages/Activity'
+import Clusters from './pages/Clusters'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
 
@@ -27,6 +28,7 @@ export default function App() {
                 <Route path="/actions/:name" element={<ActionDetail />} />
                 <Route path="/policies" element={<Policies />} />
                 <Route path="/activity" element={<Activity />} />
+                <Route path="/clusters" element={<Clusters />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -229,3 +229,67 @@ export function useUsers() {
     queryFn: () => fetchApi('/users/'),
   })
 }
+
+// --- Clusters ---
+
+export interface ClusterInfo {
+  cluster_id: string
+  name: string
+  description: string
+  api_key_prefix: string
+  is_active: boolean
+  created_at: string
+  last_seen: string | null
+  event_count: number
+}
+
+export interface ClusterCreateResponse {
+  cluster: ClusterInfo
+  api_key: string
+}
+
+export interface ClusterEvent {
+  event_id: string
+  cluster_id: string
+  timestamp: string
+  event_type: string
+  action: string
+  target: string
+  caller: string
+  decision: string
+  reason: string
+  risk_class: string
+  effective_risk: string
+  policy_matched: string | null
+  correlation_id: string | null
+  ingested_at: string
+}
+
+export function useClusters() {
+  return useQuery<ClusterInfo[]>({
+    queryKey: ['clusters'],
+    queryFn: () => fetchApi('/clusters/'),
+  })
+}
+
+export function useClusterEvents(clusterId?: string, params?: Record<string, string>) {
+  const path = clusterId ? `/clusters/${clusterId}/events` : '/clusters/events'
+  return useQuery<PaginatedResponse<ClusterEvent>>({
+    queryKey: ['cluster-events', clusterId, params],
+    queryFn: () => fetchApi(path, params),
+  })
+}
+
+export function useClusterStats(clusterId?: string) {
+  const path = clusterId ? `/clusters/${clusterId}/stats` : '/clusters/stats'
+  return useQuery<AuditStats>({
+    queryKey: ['cluster-stats', clusterId],
+    queryFn: () => fetchApi(path),
+  })
+}
+
+export function useRegisterCluster() {
+  return useMutation<ClusterCreateResponse, Error, { name: string; description?: string }>({
+    mutationFn: (body) => postApi('/clusters/', body),
+  })
+}

@@ -67,12 +67,12 @@ class TestMigrations:
 
     def test_run_migrations(self, db: Database) -> None:
         version = run_migrations(db)
-        assert version == 1
+        assert version == 2
 
     def test_migrations_idempotent(self, db: Database) -> None:
         run_migrations(db)
         run_migrations(db)
-        assert get_schema_version(db) == 1
+        assert get_schema_version(db) == 2
 
     def test_users_table_created(self, db: Database) -> None:
         run_migrations(db)

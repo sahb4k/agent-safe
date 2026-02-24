@@ -137,6 +137,9 @@ def build_shippers(config: dict[str, Any]) -> list[AuditShipper]:
     - ``webhook_timeout``: optional timeout for WebhookShipper (default 10.0)
     - ``s3_bucket``: bucket name for S3Shipper
     - ``s3_prefix``: optional key prefix for S3Shipper (default "audit-logs/")
+    - ``dashboard_url``: URL for DashboardShipper
+    - ``dashboard_api_key``: cluster API key for DashboardShipper
+    - ``dashboard_timeout``: optional timeout for DashboardShipper (default 10.0)
     """
     shippers: list[AuditShipper] = []
 
@@ -157,6 +160,17 @@ def build_shippers(config: dict[str, Any]) -> list[AuditShipper]:
             S3Shipper(
                 bucket=config["s3_bucket"],
                 prefix=config.get("s3_prefix", "audit-logs/"),
+            )
+        )
+
+    if config.get("dashboard_url") is not None:
+        from agent_safe.audit.dashboard_shipper import DashboardShipper
+
+        shippers.append(
+            DashboardShipper(
+                dashboard_url=config["dashboard_url"],
+                api_key=config.get("dashboard_api_key", ""),
+                timeout=config.get("dashboard_timeout", 10.0),
             )
         )
 

@@ -18,7 +18,7 @@ TIERS: dict[str, TierInfo] = {
     "team": TierInfo(
         tier="team",
         max_users=10,
-        features=["auth", "reports", "users"],
+        features=["auth", "reports", "users", "clusters"],
     ),
     "enterprise": TierInfo(
         tier="enterprise",
