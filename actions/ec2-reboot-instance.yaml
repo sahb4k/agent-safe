@@ -1,0 +1,44 @@
+name: ec2-reboot-instance
+version: "1.0.0"
+description: >
+  Reboot a running EC2 instance. Equivalent to an OS-level
+  reboot; the instance stays in "running" state.
+
+parameters:
+  - name: instance_id
+    type: string
+    required: true
+    description: EC2 instance ID (i-...)
+  - name: region
+    type: string
+    required: true
+    description: AWS region (e.g., us-east-1)
+
+risk_class: high
+target_types:
+  - aws-ec2-instance
+
+prechecks:
+  - name: instance-exists
+    description: Verify the instance exists and is in running state
+
+reversible: false
+required_privileges:
+  - "ec2:RebootInstances"
+  - "ec2:DescribeInstances"
+tags:
+  - aws
+  - ec2
+  - instance
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ec2:RebootInstances", "ec2:DescribeInstances"]
+    resources: ["arn:aws:ec2:{{ params.region }}:*:instance/{{ params.instance_id }}"]
+  ttl: 300
+
+state_fields:
+  - name: state
+    description: Instance state
+    type: string

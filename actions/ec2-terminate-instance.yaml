@@ -1,0 +1,50 @@
+name: ec2-terminate-instance
+version: "1.0.0"
+description: >
+  Terminate an EC2 instance permanently. This is irreversible —
+  the instance and its ephemeral storage are destroyed.
+
+parameters:
+  - name: instance_id
+    type: string
+    required: true
+    description: EC2 instance ID (i-...)
+  - name: region
+    type: string
+    required: true
+    description: AWS region (e.g., us-east-1)
+
+risk_class: critical
+target_types:
+  - aws-ec2-instance
+
+prechecks:
+  - name: instance-exists
+    description: Verify the instance exists
+  - name: termination-protection
+    description: Check that termination protection is not enabled
+
+reversible: false
+required_privileges:
+  - "ec2:TerminateInstances"
+  - "ec2:DescribeInstances"
+tags:
+  - aws
+  - ec2
+  - instance
+  - destructive
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ec2:TerminateInstances", "ec2:DescribeInstances"]
+    resources: ["arn:aws:ec2:{{ params.region }}:*:instance/{{ params.instance_id }}"]
+  ttl: 300
+
+state_fields:
+  - name: state
+    description: Instance state
+    type: string
+  - name: instance_type
+    description: Instance type
+    type: string

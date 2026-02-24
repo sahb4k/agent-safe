@@ -44,7 +44,7 @@ Phase 3           → Agent Supervisor       (separate product decision)
 - [x] **Rate Limiting + Circuit Breakers**: Per-caller sliding window rate limiting. Circuit breaker auto-pauses agents exceeding DENY thresholds. Thread-safe, injectable clock.
 - [x] **External Audit Log Shipping**: Pluggable shipper protocol with FilesystemShipper, WebhookShipper (stdlib), S3Shipper (optional boto3). Fire-and-forget after local write.
 - [x] **Credential Scoping Design**: Architecture document for vault-based credential gating ([CREDENTIAL-SCOPING.md](CREDENTIAL-SCOPING.md)).
-- [ ] **Second target environment actions**: Deferred — awaiting design partner feedback on AWS vs Linux/SSH.
+- [x] **Second target environment actions**: AWS — 12 actions (EC2, ECS, Lambda, S3, IAM) with AwsExecutor (v0.9.0).
 
 **Enforcement model**: Ticket-based — agent receives a signed ticket, must present it to the executor. Executor validates before acting. Agent still holds some credentials, but the ticket provides an audit-verified authorization chain.
 
@@ -78,8 +78,10 @@ Phase 3           → Agent Supervisor       (separate product decision)
 - [x] **Before/After State Capture**: Executors record target state before/after execution via SDK. State data (before, after, diff) stored as `state_capture` audit events linked to original decisions. Advisory `state_fields` in action YAML. CLI `audit show-state` and `audit state-coverage` commands.
 - [x] **Rollback Pairing (K8s only)**: Declarative `rollback_params` mapping in action YAML. `generate_rollback()` and `check_rollback()` SDK methods. `rollback show` and `rollback check` CLI commands. Convention-based fallback for undeclared mappings. Rollback goes through PDP with `correlation_id` linking to original decision.
 - [x] **Runner (Single Backend — K8s only)**: Runner/Executor framework with `Executor` protocol, `DryRunExecutor`, and `SubprocessExecutor` (kubectl). Runner orchestrates: ticket validation → credential resolution → prechecks → before-state → execute → after-state → audit → revoke. SDK `execute()` convenience method. CLI `runner execute` and `runner dry-run` commands.
+- [x] **K8sExecutor (Python-native)**: Python-native Kubernetes executor using the `kubernetes` client library. Maps 17 actions to API calls (AppsV1Api, CoreV1Api, AutoscalingV1Api, NetworkingV1Api). No kubectl binary required. Multi-step drain-node. Optional dependency: `pip install agent-safe[k8s]`.
+- [x] **AWS Actions + AwsExecutor**: 12 curated AWS action definitions (EC2, ECS, Lambda, S3, IAM) with AwsExecutor using boto3. Request builders, state extractors, credential handling (access key, profile, default chain). Optional dependency: `pip install agent-safe[aws]`.
 
-**Enforcement model**: Enforced for K8s (via Runner), advisory + tickets for other targets.
+**Enforcement model**: Enforced for K8s (via Runner/K8sExecutor) and AWS (via AwsExecutor), advisory + tickets for other targets.
 
 ---
 

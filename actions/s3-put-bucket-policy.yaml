@@ -1,0 +1,60 @@
+name: s3-put-bucket-policy
+version: "1.0.0"
+description: >
+  Set or replace the bucket policy on an S3 bucket.
+  This is an IAM-adjacent action that controls access.
+
+parameters:
+  - name: bucket
+    type: string
+    required: true
+    description: S3 bucket name
+  - name: policy
+    type: string
+    required: true
+    description: JSON bucket policy document
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+
+risk_class: critical
+target_types:
+  - aws-s3-bucket
+
+prechecks:
+  - name: bucket-exists
+    description: Verify the bucket exists
+  - name: policy-valid
+    description: Validate the policy document structure
+
+reversible: true
+rollback_action: s3-put-bucket-policy
+required_privileges:
+  - "s3:PutBucketPolicy"
+  - "s3:GetBucketPolicy"
+tags:
+  - aws
+  - s3
+  - iam
+  - policy
+
+credentials:
+  type: aws
+  fields:
+    actions: ["s3:PutBucketPolicy", "s3:GetBucketPolicy"]
+    resources: ["arn:aws:s3:::{{ params.bucket }}"]
+  ttl: 300
+
+state_fields:
+  - name: policy
+    description: Current bucket policy document (JSON)
+    type: string
+
+rollback_params:
+  bucket:
+    source: params.bucket
+  policy:
+    source: before_state.policy
+  region:
+    source: params.region

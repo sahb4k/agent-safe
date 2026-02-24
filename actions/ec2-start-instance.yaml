@@ -1,0 +1,50 @@
+name: ec2-start-instance
+version: "1.0.0"
+description: >
+  Start a stopped EC2 instance.
+
+parameters:
+  - name: instance_id
+    type: string
+    required: true
+    description: EC2 instance ID (i-...)
+  - name: region
+    type: string
+    required: true
+    description: AWS region (e.g., us-east-1)
+
+risk_class: medium
+target_types:
+  - aws-ec2-instance
+
+prechecks:
+  - name: instance-exists
+    description: Verify the instance exists and is in stopped state
+
+reversible: true
+rollback_action: ec2-stop-instance
+required_privileges:
+  - "ec2:StartInstances"
+  - "ec2:DescribeInstances"
+tags:
+  - aws
+  - ec2
+  - instance
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ec2:StartInstances", "ec2:DescribeInstances"]
+    resources: ["arn:aws:ec2:{{ params.region }}:*:instance/{{ params.instance_id }}"]
+  ttl: 300
+
+state_fields:
+  - name: state
+    description: Instance state (running, stopped, etc.)
+    type: string
+
+rollback_params:
+  instance_id:
+    source: params.instance_id
+  region:
+    source: params.region

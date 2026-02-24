@@ -1,0 +1,54 @@
+name: ec2-stop-instance
+version: "1.0.0"
+description: >
+  Stop an EC2 instance gracefully. The instance can be
+  restarted later with ec2-start-instance.
+
+parameters:
+  - name: instance_id
+    type: string
+    required: true
+    description: EC2 instance ID (i-...)
+  - name: region
+    type: string
+    required: true
+    description: AWS region (e.g., us-east-1)
+
+risk_class: high
+target_types:
+  - aws-ec2-instance
+
+prechecks:
+  - name: instance-exists
+    description: Verify the instance exists and is in running state
+
+reversible: true
+rollback_action: ec2-start-instance
+required_privileges:
+  - "ec2:StopInstances"
+  - "ec2:DescribeInstances"
+tags:
+  - aws
+  - ec2
+  - instance
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ec2:StopInstances", "ec2:DescribeInstances"]
+    resources: ["arn:aws:ec2:{{ params.region }}:*:instance/{{ params.instance_id }}"]
+  ttl: 300
+
+state_fields:
+  - name: state
+    description: Instance state (running, stopped, etc.)
+    type: string
+  - name: instance_type
+    description: Instance type (e.g., t3.medium)
+    type: string
+
+rollback_params:
+  instance_id:
+    source: params.instance_id
+  region:
+    source: params.region

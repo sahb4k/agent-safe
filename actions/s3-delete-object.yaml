@@ -1,0 +1,51 @@
+name: s3-delete-object
+version: "1.0.0"
+description: >
+  Delete an object from an S3 bucket. This is irreversible
+  unless versioning is enabled on the bucket.
+
+parameters:
+  - name: bucket
+    type: string
+    required: true
+    description: S3 bucket name
+  - name: key
+    type: string
+    required: true
+    description: Object key (path)
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+
+risk_class: high
+target_types:
+  - aws-s3-bucket
+
+prechecks:
+  - name: object-exists
+    description: Verify the object exists in the bucket
+
+reversible: false
+required_privileges:
+  - "s3:DeleteObject"
+  - "s3:GetObject"
+tags:
+  - aws
+  - s3
+  - destructive
+
+credentials:
+  type: aws
+  fields:
+    actions: ["s3:DeleteObject", "s3:GetObject"]
+    resources: ["arn:aws:s3:::{{ params.bucket }}/{{ params.key }}"]
+  ttl: 300
+
+state_fields:
+  - name: content_length
+    description: Object size in bytes
+    type: integer
+  - name: content_type
+    description: Object content type
+    type: string

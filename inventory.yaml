@@ -74,3 +74,38 @@ targets:
     owner: dev-team
     labels:
       purpose: debugging
+
+  # --- AWS Production ---
+  - id: prod/api-instance
+    type: aws-ec2-instance
+    environment: prod
+    sensitivity: critical
+    owner: infra-team
+    labels:
+      service: api
+      instance_id: i-0abc123def456
+
+  - id: staging/worker-service
+    type: aws-ecs-service
+    environment: staging
+    sensitivity: internal
+    owner: platform-team
+    labels:
+      cluster: staging-cluster
+      service: worker
+
+  - id: prod/payment-processor
+    type: aws-lambda-function
+    environment: prod
+    sensitivity: critical
+    owner: payments-team
+    labels:
+      function: payment-processor
+
+  - id: prod/audit-bucket
+    type: aws-s3-bucket
+    environment: prod
+    sensitivity: restricted
+    owner: security-team
+    labels:
+      bucket: company-audit-logs

@@ -1,6 +1,6 @@
 [project]
 name = "agent-safe"
-version = "0.8.0"
+version = "0.9.0"
 description = "A governance and policy enforcement layer for AI agents and non-human identities"
 readme = "README.md"
 license = "Apache-2.0"
@@ -44,7 +44,17 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
 ]
+k8s = [
+    "kubernetes>=28.1,<32.0",
+]
+aws = [
+    "boto3>=1.28",
+]
 s3 = [
+    "boto3>=1.28",
+]
+all = [
+    "kubernetes>=28.1,<32.0",
     "boto3>=1.28",
 ]
 

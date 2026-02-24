@@ -252,6 +252,31 @@ The PDP design does not change. Cumulative risk is an additive post-policy layer
 | D29 | Precheck enforcement | Advisory only in v0.8.0 | Blocking, configurable | "Advisory before enforced" principle. Let operators see precheck results before making them blocking. |
 | D30 | Execution audit event type | `"execution"` event_type in audit log | Extend decision events, separate store | Follows the state_capture pattern. New event_type, linked via correlation_id. Hash chain covers execution events. |
 
+## Phase 2 Architecture: Multi-Environment Executors
+
+v0.9.0 adds Python-native executors for Kubernetes and AWS, replacing the need for external binaries:
+
+```
+Runner validates ticket
+  │
+  ├─ --executor dry-run    → DryRunExecutor (no-op, testing)
+  ├─ --executor subprocess → SubprocessExecutor (shells to kubectl)
+  ├─ --executor k8s        → K8sExecutor (kubernetes Python client)
+  └─ --executor aws        → AwsExecutor (boto3)
+```
+
+**K8sExecutor**: Maps 17 actions to kubernetes Python client API calls. Uses AppsV1Api, CoreV1Api, AutoscalingV1Api, and NetworkingV1Api. Credential handling: kubeconfig file, bearer token, or in-cluster config. Multi-step drain-node (cordon → list pods → evict non-DaemonSet pods).
+
+**AwsExecutor**: Maps 12 actions to boto3 API calls across EC2, ECS, Lambda, S3, and IAM. Credential handling: access key + secret + session token, named profile, or boto3 default chain. Datetime serialization for JSON compatibility.
+
+Both executors are optional dependencies (`pip install agent-safe[k8s]` / `pip install agent-safe[aws]`). Lazy import guards ensure the core package works without them.
+
+| # | Decision | Chosen | Alternatives Considered | Rationale |
+|---|----------|--------|------------------------|-----------|
+| D31 | K8sExecutor client library | `kubernetes` Python client | kubectl subprocess, custom HTTP | Python client provides type safety, structured responses, and doesn't require kubectl binary. SubprocessExecutor remains for operators who prefer kubectl. |
+| D32 | AWS as second target environment | AWS (EC2, ECS, Lambda, S3, IAM) | Azure, GCP, Linux/SSH | AWS is the most-requested cloud by design partners. 12 curated actions cover the most common agent operations. Same executor protocol as K8s — no framework changes needed. |
+| D33 | Optional dependency strategy | Lazy import guards + extras | Hard dependencies, plugin system | `_check_kubernetes_available()` / `_check_boto3_available()` in `__init__`, not at module level. Core package stays lightweight. `[k8s]`, `[aws]`, `[all]` extras in pyproject.toml. |
+
 ## Future Architecture (Phase 2+)
 
 When enforcement is added:

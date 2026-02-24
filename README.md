@@ -54,7 +54,10 @@ Agent: "OK, I'll queue this for human review."
 ### Install
 
 ```bash
-pip install agent-safe
+pip install agent-safe            # Core (policy engine, DryRun/Subprocess executors)
+pip install agent-safe[k8s]       # + K8sExecutor (kubernetes Python client)
+pip install agent-safe[aws]       # + AwsExecutor (boto3)
+pip install agent-safe[all]       # Everything
 ```
 
 ### Scaffold a project
@@ -157,7 +160,7 @@ def agent_step(action, target, params):
 | **Ticket/Incident Linkage** | Link actions to external change tickets (JIRA, ServiceNow, etc.). Policies can require tickets. First-class audit field for compliance. |
 | **Before/After State Capture** | Record target state before and after action execution. Diffs stored in audit log for compliance. Advisory `state_fields` in action YAML. |
 | **Rollback Pairing** | Generate compensating rollback plans from state capture data. Declarative `rollback_params` in YAML. Rollback goes through PDP — no unaudited rollbacks. |
-| **Runner/Executor** | Orchestrated action execution: validate ticket → resolve credentials → prechecks → state capture → execute → audit → revoke. Pluggable `Executor` protocol with DryRunExecutor and SubprocessExecutor (kubectl). |
+| **Runner/Executor** | Orchestrated action execution: validate ticket → resolve credentials → prechecks → state capture → execute → audit → revoke. Pluggable `Executor` protocol with DryRunExecutor, SubprocessExecutor (kubectl), K8sExecutor (kubernetes Python client), and AwsExecutor (boto3). |
 | **Context-Aware Risk** | Risk = f(action risk, target sensitivity). A medium action on a critical target = critical effective risk. |
 
 ## Key Design Decisions
@@ -182,6 +185,20 @@ Agent-Safe ships with 20 curated Kubernetes action definitions:
 | **Network** | apply-network-policy |
 
 Each definition includes parameters with type constraints, risk class, reversibility flag, required K8s RBAC privileges, and tags.
+
+## AWS Action Catalogue
+
+Agent-Safe also ships with 12 curated AWS action definitions:
+
+| Category | Actions |
+|----------|---------|
+| **EC2** | ec2-stop-instance, ec2-start-instance, ec2-reboot-instance, ec2-terminate-instance |
+| **ECS** | ecs-update-service, ecs-stop-task, ecs-scale-service |
+| **Lambda** | lambda-update-function-config, lambda-invoke-function |
+| **S3** | s3-delete-object, s3-put-bucket-policy |
+| **IAM** | iam-attach-role-policy |
+
+Each definition includes parameters, risk class, credential scoping (IAM actions + resources), reversibility, and rollback params where applicable.
 
 ## Batch Plan Checking
 
@@ -432,6 +449,8 @@ agent-safe test ./tests/ --registry ./actions --policies ./policies
 | `agent-safe credential resolve <token>` | Resolve credentials for a valid ticket |
 | `agent-safe credential test-vault` | Test vault connectivity |
 | `agent-safe approval list/show/approve/deny` | Manage approval requests |
+| `agent-safe runner execute <token>` | Execute an action via Runner (--executor dry-run/subprocess/k8s/aws) |
+| `agent-safe runner dry-run <token>` | Dry-run an action (validate ticket, show what would happen) |
 | `agent-safe delegation create <token>` | Create a delegation token for a sub-agent |
 | `agent-safe delegation verify <token>` | Verify a delegation token and display chain |
 
@@ -455,10 +474,9 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.7.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, and rollback pairing are complete and tested. 783 tests passing.
+**Alpha** (v0.9.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (12 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor. ~1000 tests passing.
 
-What's next (Phase 2):
-- K8s Runner / Executor
+What's next:
 - Web dashboard (Phase 2.5)
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.

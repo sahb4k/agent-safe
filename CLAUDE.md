@@ -4,11 +4,11 @@
 Agent-Safe is an open-source governance/control layer for AI agents and non-human identities (NHIs).
 It is NOT an agent. It is the system that restricts and governs what agents are allowed to do.
 
-Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + Before/After State Capture + Rollback Pairing + Runner/Executor + SDK/CLI.
+Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + Before/After State Capture + Rollback Pairing + Runner/Executor (DryRun, Subprocess, K8s, AWS) + SDK/CLI.
 
 ## Key Decisions (Locked)
 - **Deployment**: Sidecar / library (runs in customer's environment, no cloud dependency)
-- **Target environment**: Kubernetes first (all action catalogues scoped to K8s API)
+- **Target environment**: Kubernetes first + AWS (K8s actions + 12 AWS actions across EC2, ECS, Lambda, S3, IAM)
 - **Enforcement model**: Advisory + ticket-based. PDP returns ALLOW/DENY/REQUIRE_APPROVAL. ALLOW decisions include signed execution tickets. Rate limiting + circuit breaker protect against misbehaving agents. Cumulative risk scoring escalates decisions when action chaining accumulates too much risk.
 - **GTM**: Open-source core (Apache 2.0), future paid tier (hosted dashboard, enterprise features)
 - **Tech stack**: Python (most agent frameworks are Python)
@@ -66,9 +66,15 @@ agent-safe/
 │       ├── ratelimit/      # Per-caller rate limiting + circuit breaker
 │       ├── credentials/    # Credential vault protocol + resolver
 │       ├── approval/       # Approval workflows (store + notifiers)
+│       ├── runner/         # Runner/Executor framework
+│       │   ├── runner.py        # Runner orchestrator
+│       │   ├── executor.py      # Executor protocol + DryRunExecutor
+│       │   ├── subprocess_executor.py  # SubprocessExecutor (kubectl)
+│       │   ├── k8s_executor.py  # K8sExecutor (kubernetes Python client)
+│       │   └── aws_executor.py  # AwsExecutor (boto3)
 │       ├── sdk/            # Public SDK interface (AgentSafe class)
 │       └── cli/            # CLI entry point
-├── actions/                # YAML action definitions (K8s)
+├── actions/                # YAML action definitions (K8s + AWS)
 ├── policies/               # Policy definitions
 ├── tests/
 ├── docs/
@@ -91,15 +97,13 @@ agent-safe/
 5. **Advisory before enforced** — log and decide now, gate credentials later
 
 ## What NOT to Build Yet (Phase 2.5 and beyond)
-- No Runner/Executor (agents execute, we decide + issue tickets)
 - No cloud infrastructure (sidecar/library only)
-- No rollback automation
 - No dashboard (Phase 2.5)
 - No agent supervisor (separate product decision)
 
 ## Documentation
 - `docs/MVP-PLAN.md` — 6–8 week detailed build plan (Phase 1)
-- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 in progress)
+- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 ✅)
 - `docs/ARCHITECTURE.md` — Architecture decisions and diagrams
 - `docs/GETTING-STARTED.md` — Installation, quick start, SDK usage, all features
 - `docs/CREDENTIAL-SCOPING.md` — Vault-based credential gating design (implemented)

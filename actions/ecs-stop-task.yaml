@@ -1,0 +1,51 @@
+name: ecs-stop-task
+version: "1.0.0"
+description: >
+  Stop a specific ECS task. The service scheduler will
+  launch a replacement if desired count is not met.
+
+parameters:
+  - name: cluster
+    type: string
+    required: true
+    description: ECS cluster name or ARN
+  - name: task
+    type: string
+    required: true
+    description: ECS task ID or ARN
+  - name: reason
+    type: string
+    required: false
+    description: Reason for stopping the task
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+
+risk_class: medium
+target_types:
+  - aws-ecs-task
+
+prechecks:
+  - name: task-exists
+    description: Verify the task exists and is running
+
+reversible: false
+required_privileges:
+  - "ecs:StopTask"
+  - "ecs:DescribeTasks"
+tags:
+  - aws
+  - ecs
+  - task
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ecs:StopTask", "ecs:DescribeTasks"]
+  ttl: 300
+
+state_fields:
+  - name: last_status
+    description: Current task status
+    type: string

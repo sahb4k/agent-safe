@@ -1,0 +1,59 @@
+name: iam-attach-role-policy
+version: "1.0.0"
+description: >
+  Attach a managed IAM policy to an IAM role. This is a
+  critical action — granting permissions to a role.
+
+parameters:
+  - name: role_name
+    type: string
+    required: true
+    description: IAM role name
+  - name: policy_arn
+    type: string
+    required: true
+    description: ARN of the managed policy to attach
+  - name: region
+    type: string
+    required: true
+    description: AWS region (IAM is global but region is required for credentials)
+
+risk_class: critical
+target_types:
+  - aws-iam-role
+
+prechecks:
+  - name: role-exists
+    description: Verify the IAM role exists
+  - name: policy-exists
+    description: Verify the managed policy exists
+
+reversible: true
+rollback_action: iam-detach-role-policy
+required_privileges:
+  - "iam:AttachRolePolicy"
+  - "iam:ListAttachedRolePolicies"
+tags:
+  - aws
+  - iam
+  - policy
+  - critical
+
+credentials:
+  type: aws
+  fields:
+    actions: ["iam:AttachRolePolicy", "iam:ListAttachedRolePolicies"]
+  ttl: 300
+
+state_fields:
+  - name: attached_policies
+    description: List of currently attached policy ARNs
+    type: array
+
+rollback_params:
+  role_name:
+    source: params.role_name
+  policy_arn:
+    source: params.policy_arn
+  region:
+    source: params.region

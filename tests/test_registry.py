@@ -415,7 +415,7 @@ class TestLoadRegistry:
     def test_load_real_actions_dir(self):
         """Load the actual project actions/ directory."""
         registry = load_registry("e:/Docs/Projects/agent-safe/actions")
-        assert len(registry) == 20
+        assert len(registry) == 32  # 20 K8s + 12 AWS
         assert registry.get("restart-deployment") is not None
         assert registry.get("scale-deployment") is not None
         assert registry.get("delete-pod") is not None
@@ -429,7 +429,7 @@ class TestLoadRegistry:
         """Verify that all shipped action files produce valid hashes."""
         registry = load_registry("e:/Docs/Projects/agent-safe/actions")
         hashes = registry.file_hashes
-        assert len(hashes) == 20
+        assert len(hashes) == 32  # 20 K8s + 12 AWS
         for name, h in hashes.items():
             assert len(h) == 64, f"Bad hash for {name}"
 

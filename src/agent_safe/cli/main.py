@@ -1570,11 +1570,14 @@ def runner() -> None:
 )
 @click.option(
     "--executor", "executor_type", default="dry-run",
-    type=click.Choice(["dry-run", "subprocess"]),
+    type=click.Choice(["dry-run", "subprocess", "k8s", "aws"]),
     help="Executor backend (default: dry-run)",
 )
 @click.option("--kubectl-path", default="kubectl", help="Path to kubectl binary")
 @click.option("--kubeconfig", default=None, help="Path to kubeconfig file")
+@click.option("--in-cluster", is_flag=True, help="Use in-cluster K8s config (k8s executor)")
+@click.option("--aws-region", default=None, help="AWS region (aws executor)")
+@click.option("--aws-profile", default=None, help="AWS profile name (aws executor)")
 @click.option("--timeout", default=300.0, type=float, help="Execution timeout in seconds")
 @click.option(
     "--vault-cred", multiple=True,
@@ -1592,6 +1595,9 @@ def runner_execute(
     executor_type: str,
     kubectl_path: str,
     kubeconfig: str | None,
+    in_cluster: bool,
+    aws_region: str | None,
+    aws_profile: str | None,
     timeout: float,
     vault_cred: tuple[str, ...],
     audit_log: str | None,
@@ -1609,6 +1615,20 @@ def runner_execute(
         executor = SubprocessExecutor(
             kubectl_path=kubectl_path,
             kubeconfig=kubeconfig,
+        )
+    elif executor_type == "k8s":
+        from agent_safe.runner.k8s_executor import K8sExecutor
+
+        executor = K8sExecutor(
+            kubeconfig=kubeconfig,
+            in_cluster=in_cluster,
+        )
+    elif executor_type == "aws":
+        from agent_safe.runner.aws_executor import AwsExecutor
+
+        executor = AwsExecutor(
+            region=aws_region,
+            profile=aws_profile,
         )
     else:
         executor = DryRunExecutor()

@@ -1,0 +1,69 @@
+name: ecs-scale-service
+version: "1.0.0"
+description: >
+  Scale an ECS service to a specified desired task count.
+
+parameters:
+  - name: cluster
+    type: string
+    required: true
+    description: ECS cluster name or ARN
+  - name: service
+    type: string
+    required: true
+    description: ECS service name
+  - name: desired_count
+    type: integer
+    required: true
+    description: Target desired task count
+    constraints:
+      min_value: 0
+      max_value: 500
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+
+risk_class: medium
+target_types:
+  - aws-ecs-service
+
+prechecks:
+  - name: service-exists
+    description: Verify the ECS service exists and is ACTIVE
+
+reversible: true
+rollback_action: ecs-scale-service
+required_privileges:
+  - "ecs:UpdateService"
+  - "ecs:DescribeServices"
+tags:
+  - aws
+  - ecs
+  - service
+  - scaling
+
+credentials:
+  type: aws
+  fields:
+    actions: ["ecs:UpdateService", "ecs:DescribeServices"]
+  ttl: 300
+
+state_fields:
+  - name: desired_count
+    description: Current desired task count
+    type: integer
+    required: true
+  - name: running_count
+    description: Number of running tasks
+    type: integer
+
+rollback_params:
+  cluster:
+    source: params.cluster
+  service:
+    source: params.service
+  desired_count:
+    source: before_state.desired_count
+  region:
+    source: params.region

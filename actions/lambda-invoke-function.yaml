@@ -1,0 +1,46 @@
+name: lambda-invoke-function
+version: "1.0.0"
+description: >
+  Invoke a Lambda function synchronously and return the response.
+
+parameters:
+  - name: function_name
+    type: string
+    required: true
+    description: Lambda function name or ARN
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+  - name: payload
+    type: string
+    required: false
+    description: JSON payload to send to the function
+
+risk_class: low
+target_types:
+  - aws-lambda-function
+
+prechecks:
+  - name: function-exists
+    description: Verify the Lambda function exists
+
+reversible: false
+required_privileges:
+  - "lambda:InvokeFunction"
+  - "lambda:GetFunction"
+tags:
+  - aws
+  - lambda
+  - invoke
+
+credentials:
+  type: aws
+  fields:
+    actions: ["lambda:InvokeFunction", "lambda:GetFunction"]
+  ttl: 300
+
+state_fields:
+  - name: state
+    description: Function state (Active, Pending, etc.)
+    type: string

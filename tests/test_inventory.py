@@ -146,7 +146,7 @@ class TestLoadInventory:
     def test_load_real_inventory_file(self):
         """Load the actual project inventory.yaml to verify it's valid."""
         inv = load_inventory(Path("e:/Docs/Projects/agent-safe/inventory.yaml"))
-        assert len(inv) == 8
+        assert len(inv) == 12
         assert inv.get("prod/api-server") is not None
         assert inv.get("dev/debug-pod") is not None
 

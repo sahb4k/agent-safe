@@ -178,3 +178,73 @@ class TestSDKExecute:
             # Should not error — DryRunExecutor ignores credentials
             result = safe.execute(decision.ticket.token)
             assert result.status == ExecutionStatus.SKIPPED
+
+    def test_execute_with_mock_k8s_executor(self) -> None:
+        """SDK execute() with a mock K8sExecutor."""
+        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
+            safe = AgentSafe(
+                registry=ACTIONS_DIR,
+                policies=POLICIES_DIR,
+                inventory=INVENTORY_FILE,
+                audit_log=tmp.name,
+                signing_key=SIGNING_KEY,
+            )
+            decision = safe.check(
+                action="restart-deployment",
+                target="dev/test-app",
+                caller="deploy-bot",
+                params={"namespace": "dev", "deployment": "test-app"},
+            )
+
+            mock_executor = MagicMock()
+            mock_executor.run_prechecks.return_value = []
+            mock_executor.get_state.return_value = {}
+            mock_executor.execute.return_value = ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                action="restart-deployment",
+                target="dev/test-app",
+                caller="deploy-bot",
+                audit_id=decision.audit_id,
+                output="restarted via k8s client",
+                executor_type="k8s",
+            )
+
+            result = safe.execute(decision.ticket.token, executor=mock_executor)
+            assert result.status == ExecutionStatus.SUCCESS
+            assert result.executor_type == "k8s"
+
+    def test_execute_with_mock_aws_executor(self) -> None:
+        """SDK execute() with a mock AwsExecutor."""
+        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
+            safe = AgentSafe(
+                registry=ACTIONS_DIR,
+                policies=POLICIES_DIR,
+                inventory=INVENTORY_FILE,
+                audit_log=tmp.name,
+                signing_key=SIGNING_KEY,
+            )
+            # Use a dev target that gets ALLOW, then pass a mock AWS executor
+            decision = safe.check(
+                action="restart-deployment",
+                target="dev/test-app",
+                caller="deploy-bot",
+                params={"namespace": "dev", "deployment": "test-app"},
+            )
+            assert decision.ticket is not None
+
+            mock_executor = MagicMock()
+            mock_executor.run_prechecks.return_value = []
+            mock_executor.get_state.return_value = {}
+            mock_executor.execute.return_value = ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                action="restart-deployment",
+                target="dev/test-app",
+                caller="deploy-bot",
+                audit_id=decision.audit_id,
+                output="instance stopping",
+                executor_type="aws",
+            )
+
+            result = safe.execute(decision.ticket.token, executor=mock_executor)
+            assert result.status == ExecutionStatus.SUCCESS
+            assert result.executor_type == "aws"

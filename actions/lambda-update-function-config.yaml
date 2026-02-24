@@ -1,0 +1,78 @@
+name: lambda-update-function-config
+version: "1.0.0"
+description: >
+  Update a Lambda function's runtime configuration
+  (memory, timeout, environment variables).
+
+parameters:
+  - name: function_name
+    type: string
+    required: true
+    description: Lambda function name or ARN
+  - name: region
+    type: string
+    required: true
+    description: AWS region
+  - name: memory_size
+    type: integer
+    required: false
+    description: Memory in MB
+    constraints:
+      min_value: 128
+      max_value: 10240
+  - name: timeout
+    type: integer
+    required: false
+    description: Timeout in seconds
+    constraints:
+      min_value: 1
+      max_value: 900
+  - name: environment_variables
+    type: string
+    required: false
+    description: JSON string of environment variable key-value pairs
+
+risk_class: medium
+target_types:
+  - aws-lambda-function
+
+prechecks:
+  - name: function-exists
+    description: Verify the Lambda function exists
+
+reversible: true
+rollback_action: lambda-update-function-config
+required_privileges:
+  - "lambda:UpdateFunctionConfiguration"
+  - "lambda:GetFunctionConfiguration"
+tags:
+  - aws
+  - lambda
+  - config
+
+credentials:
+  type: aws
+  fields:
+    actions: ["lambda:UpdateFunctionConfiguration", "lambda:GetFunctionConfiguration"]
+  ttl: 300
+
+state_fields:
+  - name: memory_size
+    description: Current memory allocation (MB)
+    type: integer
+  - name: timeout
+    description: Current timeout (seconds)
+    type: integer
+  - name: runtime
+    description: Current runtime
+    type: string
+
+rollback_params:
+  function_name:
+    source: params.function_name
+  region:
+    source: params.region
+  memory_size:
+    source: before_state.memory_size
+  timeout:
+    source: before_state.timeout

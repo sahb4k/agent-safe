@@ -135,3 +135,79 @@ class TestRunnerDryRunCLI:
         ])
         assert "restart-deployment" in result.output
         assert "dev/test-app" in result.output
+
+
+class TestRunnerExecutorOptionsCLI:
+    def test_executor_k8s_option_accepted(self) -> None:
+        """CLI accepts --executor k8s (will fail at k8s import, but option is valid)."""
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "k8s",
+        ])
+        # May succeed or fail depending on kubernetes package,
+        # but should NOT fail with "invalid choice"
+        assert "Invalid value" not in (result.output or "")
+
+    def test_executor_aws_option_accepted(self) -> None:
+        """CLI accepts --executor aws (will fail at boto3 import, but option is valid)."""
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "aws",
+        ])
+        assert "Invalid value" not in (result.output or "")
+
+    def test_aws_region_option(self) -> None:
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "dry-run",
+            "--aws-region", "us-west-2",
+        ])
+        # aws-region is ignored for dry-run but should not error
+        assert result.exit_code == 0
+
+    def test_aws_profile_option(self) -> None:
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "dry-run",
+            "--aws-profile", "staging",
+        ])
+        assert result.exit_code == 0
+
+    def test_in_cluster_option(self) -> None:
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "dry-run",
+            "--in-cluster",
+        ])
+        assert result.exit_code == 0
+
+    def test_invalid_executor_rejected(self) -> None:
+        runner = CliRunner()
+        token = _issue_token()
+        result = runner.invoke(cli, [
+            "runner", "execute", token,
+            "--signing-key", SIGNING_KEY,
+            "--registry", ACTIONS_DIR,
+            "--executor", "invalid-executor",
+        ])
+        assert result.exit_code != 0

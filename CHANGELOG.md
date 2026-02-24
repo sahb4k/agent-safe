@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-02-24
+
+Phase 2 -- Multi-Environment Executors.
+
+### Added
+
+- **K8sExecutor**: Python-native Kubernetes executor using the `kubernetes` client library. Maps 17 K8s actions to API calls (AppsV1Api, CoreV1Api, AutoscalingV1Api, NetworkingV1Api). No kubectl binary required. Multi-step drain-node (cordon + evict). Body builders for all mutation actions. Supports kubeconfig, bearer token, and in-cluster credentials.
+
+- **AwsExecutor**: AWS executor using boto3. Maps 12 AWS actions across 5 services (EC2, ECS, Lambda, S3, IAM). Request builders, state extractors, and datetime serialization. Supports access key, profile, and default credential chain.
+
+- **12 AWS action definitions**: ec2-stop-instance, ec2-start-instance, ec2-reboot-instance, ec2-terminate-instance, ecs-update-service, ecs-stop-task, ecs-scale-service, lambda-update-function-config, lambda-invoke-function, s3-delete-object, s3-put-bucket-policy, iam-attach-role-policy. All include credential scoping, risk classes, reversibility, and rollback params where applicable.
+
+- **Optional dependencies**: `pip install agent-safe[k8s]` for kubernetes, `pip install agent-safe[aws]` for boto3, `pip install agent-safe[all]` for both. Lazy import guards — core package works without optional deps.
+
+- **CLI executor options**: `--executor k8s` and `--executor aws` on `runner execute`. New options: `--aws-region`, `--aws-profile`, `--in-cluster`.
+
+- **AWS inventory targets**: 4 example AWS targets (EC2 instance, ECS service, Lambda function, S3 bucket) in inventory.yaml.
+
+- **~125 new tests** across 5 files (test_k8s_executor.py, test_aws_executor.py, test_aws_actions.py, plus additions to test_runner_sdk.py and test_runner_cli.py). **~1000 total tests**.
+
 ## [0.8.0] - 2026-02-24
 
 Phase 2 -- Runner/Executor Framework.
