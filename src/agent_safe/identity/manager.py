@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from agent_safe.models import AgentIdentity
+from agent_safe.models import AgentIdentity, DelegationLink
 
 # Default token lifetime
 DEFAULT_TOKEN_TTL = timedelta(hours=1)
@@ -23,6 +23,10 @@ _ALGORITHM = "HS256"
 
 class IdentityError(Exception):
     """Raised when token creation or validation fails."""
+
+
+class DelegationError(IdentityError):
+    """Raised when delegation token creation or validation fails."""
 
 
 class IdentityManager:
@@ -66,6 +70,98 @@ class IdentityManager:
 
         return jwt.encode(payload, self._signing_key, algorithm=_ALGORITHM)
 
+    def create_delegation_token(
+        self,
+        parent_token: str,
+        child_agent_id: str,
+        child_agent_name: str = "",
+        child_roles: list[str] | None = None,
+        child_groups: list[str] | None = None,
+        ttl: timedelta | None = None,
+        max_depth: int = 5,
+    ) -> str:
+        """Create a delegation token carrying the parent's delegation chain.
+
+        The child token carries the parent's identity as a DelegationLink
+        appended to the delegation_chain. The child's roles are the
+        intersection of the requested roles and the parent's effective roles
+        (scope narrowing).
+
+        Raises:
+            DelegationError: If parent token is invalid, depth exceeded,
+                or requested roles/groups are not a subset of parent's.
+        """
+        # Validate parent token
+        try:
+            parent = self.validate_token(parent_token)
+        except IdentityError as exc:
+            raise DelegationError(f"Invalid parent token: {exc}") from exc
+
+        # Check depth limit
+        new_depth = parent.delegation_depth + 1
+        if new_depth > max_depth:
+            raise DelegationError(
+                f"Delegation depth {new_depth} exceeds max depth {max_depth}"
+            )
+
+        # Compute parent's effective roles/groups
+        parent_effective_roles = set(parent.roles)
+        parent_effective_groups = set(parent.groups)
+
+        # Validate scope narrowing — child roles must be subset of parent's
+        child_roles = child_roles or []
+        child_groups = child_groups or []
+
+        if child_roles and not set(child_roles).issubset(parent_effective_roles):
+            extra = set(child_roles) - parent_effective_roles
+            raise DelegationError(
+                f"Cannot delegate roles not held by parent: {sorted(extra)}"
+            )
+
+        if child_groups and not set(child_groups).issubset(parent_effective_groups):
+            extra = set(child_groups) - parent_effective_groups
+            raise DelegationError(
+                f"Cannot delegate groups not held by parent: {sorted(extra)}"
+            )
+
+        # Build delegation chain — append parent as a link
+        now = datetime.now(tz=UTC)
+        parent_link = DelegationLink(
+            agent_id=parent.agent_id,
+            agent_name=parent.agent_name,
+            roles=list(parent.roles),
+            groups=list(parent.groups),
+            delegated_at=now,
+        )
+        chain = list(parent.delegation_chain) + [parent_link]
+
+        # Compute TTL — child must not outlive parent
+        if parent.expires_at is not None:
+            parent_remaining = parent.expires_at - now
+            if parent_remaining.total_seconds() <= 0:
+                raise DelegationError("Parent token has expired")
+            ttl = min(ttl, parent_remaining) if ttl is not None else parent_remaining
+        elif ttl is None:
+            ttl = DEFAULT_TOKEN_TTL
+
+        # Build JWT payload
+        payload = {
+            "agent_id": child_agent_id,
+            "agent_name": child_agent_name,
+            "roles": child_roles,
+            "groups": child_groups,
+            "iss": self._issuer,
+            "iat": now,
+            "exp": now + ttl,
+            "delegation_chain": [
+                link.model_dump(mode="json") for link in chain
+            ],
+            "delegated_roles": child_roles,
+            "delegation_depth": new_depth,
+        }
+
+        return jwt.encode(payload, self._signing_key, algorithm=_ALGORITHM)
+
     def validate_token(self, token: str) -> AgentIdentity:
         """Validate a JWT and return the agent identity.
 
@@ -95,6 +191,12 @@ class IdentityManager:
             groups=payload.get("groups", []),
             issued_at=datetime.fromtimestamp(payload["iat"], tz=UTC),
             expires_at=datetime.fromtimestamp(payload["exp"], tz=UTC),
+            delegation_chain=[
+                DelegationLink(**link)
+                for link in payload.get("delegation_chain", [])
+            ],
+            delegated_roles=payload.get("delegated_roles", []),
+            delegation_depth=payload.get("delegation_depth", 0),
         )
 
     def validate_token_or_none(self, token: str) -> AgentIdentity | None:

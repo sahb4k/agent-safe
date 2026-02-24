@@ -7,6 +7,7 @@ Agent-Safe becomes the standard governance layer for AI agents operating on infr
 ```
 Phase 1 (MVP)     → Policy Sidecar        (6-8 weeks)   ✅ COMPLETE
 Phase 1.5         → Execution Tickets      (4-6 weeks)   ✅ COMPLETE
+Phase 2.1         → Delegation + Creds     (4 weeks)     ✅ COMPLETE
 Phase 2           → Change Control         (8-12 weeks)  ← WE ARE HERE
 Phase 2.5         → Dashboard + SaaS tier  (6-8 weeks)
 Phase 3           → Agent Supervisor       (separate product decision)
@@ -49,25 +50,37 @@ Phase 3           → Agent Supervisor       (separate product decision)
 
 ---
 
+## Phase 2.1: Delegation + Credentials + Approvals
+**Status**: Complete (v0.3.0)
+
+**Goal**: Multi-agent delegation, credential gating, and approval workflows.
+
+**Deliverables**:
+- [x] **Multi-Agent Delegation**: JWT-based delegation chains. Orchestrator delegates to worker with scope narrowing (child roles ⊆ parent roles). Configurable max depth. TTL inheritance (child cannot outlive parent). Delegation context in audit trail.
+- [x] **Delegation-Aware Policies**: `CallerSelector` extended with `delegated_from`, `max_delegation_depth`, `require_delegation`. Policies control delegation at the policy level.
+- [x] **Credential Gating**: `CredentialVault` protocol with `EnvVarVault` dev/test backend. `CredentialResolver` resolves scoped credentials from vault after ticket validation. `{{ params.xyz }}` template engine for credential scope fields.
+- [x] **Approval Workflows**: `FileApprovalStore` with JSONL persistence. `ApprovalNotifier` protocol with webhook and Slack notifiers. SDK orchestration: `wait_for_approval()`, `resolve_approval()`.
+- [x] **New CLI commands**: `delegation create/verify`, `credential resolve/test-vault`, `approval list/show/approve/deny`.
+- [x] **540 tests** (up from 376).
+
+**Enforcement model**: Credential gating — agents no longer hold target credentials. Credentials are retrieved JIT via vault after ticket validation. Delegation provides provenance tracking for multi-agent workflows.
+
+---
+
 ## Phase 2: Change Control — Weeks 15–26
 **Depends on**: Phase 1.5, design partner feedback, early community adoption
 
 **Goal**: Add human-in-the-loop approval, state capture, and rollback for governed agent actions.
 
 **Deliverables**:
-- **Approval Workflows**: When PDP returns REQUIRE_APPROVAL, trigger a webhook. Integrate with:
-  - Slack (bot that posts approval request, human clicks approve/deny)
-  - Generic webhook (for PagerDuty, Teams, email, custom systems)
-  - CLI approval (for testing: `agent-safe approve <request_id>`)
-- **Approval Policies**: Define who can approve what (role-based, target-based, risk-based).
+- [x] **Cumulative Risk Scoring**: Per-caller session-level risk tracking with sliding time window. Configurable risk scores, escalation threshold (ALLOW → REQUIRE_APPROVAL), and deny threshold (any → DENY). Post-policy escalation layer. Thread-safe, injectable clock. Addresses Threat T7.
+- [x] **Ticket/Incident Linkage**: Actions reference an external ticket ID via `ticket_id` parameter. First-class audit field. Policy `require_ticket` condition controls per-rule ticket requirements. CLI `--ticket-id` option. Policy test cases support `ticket_id`.
 - **Before/After State Capture**: For supported actions, capture target state before execution and after. Store diffs in audit log.
 - **Rollback Pairing (K8s only first)**:
   - Each reversible action has a paired rollback action
   - `agent-safe rollback <audit_id>` — execute the compensating action for a previous action
   - Only for actions marked `reversible: true`
   - Rollback itself goes through PDP (no unaudited rollbacks)
-- **Cumulative Risk Scoring**: Track action sequences per agent session. Escalate to REQUIRE_APPROVAL when cumulative risk exceeds threshold (prevents privilege escalation via action chaining — see Threat Model T7).
-- **Ticket/Incident Linkage**: Actions can reference an external ticket ID. Audit log includes it. Policy can require a ticket for certain action/target combinations.
 - **Runner (Single Backend — K8s only)**: Optional sandboxed executor for K8s actions. Runs as a controller/operator. Retrieves credentials via K8s RBAC (not vault yet). Validates execution tickets before acting.
 
 **Enforcement model**: Enforced for K8s (via Runner), advisory + tickets for other targets.

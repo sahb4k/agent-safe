@@ -178,6 +178,71 @@ Agent → SDK → Rate Limiter → PDP → ALLOW + signed Execution Ticket
 
 The PDP design does not change. These features are additive.
 
+## Phase 2.1 Architecture: Delegation + Credentials + Approvals
+
+Phase 2.1 adds multi-agent delegation, credential gating, and approval workflows:
+
+```
+Orchestrator → SDK.delegate(parent_token, child_id, roles=[...])
+                    │
+                    └→ Delegation JWT (chain: [orchestrator])
+                         │
+                         └→ Worker calls SDK.check(caller=delegation_jwt)
+                              │
+                              └→ PDP evaluates with delegation context from JWT
+                                   ├─ Checks delegated_from, max_depth, require_delegation
+                                   ├─ ALLOW → Execution Ticket
+                                   │           └→ resolve_credentials(ticket) → scoped cred from vault
+                                   ├─ REQUIRE_APPROVAL → Approval Store → webhook/Slack notification
+                                   └─ Audit event includes full delegation chain in context
+```
+
+**What's new vs Phase 1.5:**
+- **Delegation chains** carried in JWT payload — PDP inspects provenance statelessly
+- **CallerSelector** extended with `delegated_from`, `max_delegation_depth`, `require_delegation`
+- **Credential Resolver** fetches scoped credentials from vault after ticket validation
+- **Approval Store** persists REQUIRE_APPROVAL decisions with notification dispatch
+- **Audit context** carries delegation chain for provenance tracking
+
+The PDP design does not change. These features are additive.
+
+| # | Decision | Chosen | Alternatives Considered | Rationale |
+|---|----------|--------|------------------------|-----------|
+| D15 | Delegation chain storage | In JWT payload | External delegation store, database | Stateless PDP preserved — no external store needed. Chain integrity guaranteed by JWT HMAC signature. Matches existing identity pattern. |
+| D16 | Scope narrowing enforcement | At token creation time | At PDP evaluation time | Strict subset check when creating delegation token prevents privilege escalation. PDP can additionally verify via policy. |
+| D17 | Credential vault interface | `typing.Protocol` | ABC, callable | Consistent with existing AuditShipper pattern. `runtime_checkable` enables `isinstance()` checks. |
+
+## Phase 2 Architecture: Cumulative Risk Scoring
+
+Phase 2 adds session-level risk tracking to prevent privilege escalation via action chaining (Threat T7):
+
+```
+Agent → SDK → Rate Limiter → PDP → Policy Decision
+                                         │
+                                         ▼
+                                  Risk Tracker (post-policy)
+                                    ├─ Record effective_risk score for caller
+                                    ├─ Compute cumulative score in sliding window
+                                    ├─ If score >= escalation_threshold: ALLOW → REQUIRE_APPROVAL
+                                    ├─ If score >= deny_threshold: any non-DENY → DENY
+                                    └─ Annotate Decision + audit context with cumulative info
+```
+
+**What's new vs Phase 2.1:**
+- **CumulativeRiskTracker** sits after policy evaluation — escalates decisions based on accumulated risk
+- **Per-caller sliding window** tracks risk scores with configurable duration (default 1 hour)
+- **Decision annotation** — `cumulative_risk_score`, `cumulative_risk_class`, `escalated_from` on every non-DENY decision
+- **Audit context** carries cumulative risk info, merged with delegation context
+
+The PDP design does not change. Cumulative risk is an additive post-policy layer.
+
+| # | Decision | Chosen | Alternatives Considered | Rationale |
+|---|----------|--------|------------------------|-----------|
+| D18 | Cumulative risk placement | Post-policy escalation | Policy match field, pre-policy check | Post-policy keeps policy rules simple (each evaluates one action in isolation) while adding session awareness as a separate concern. Escalation only goes UP, never DOWN. |
+| D19 | Risk recording trigger | Non-DENY decisions only | All decisions, ALLOW only | Only non-DENY decisions represent actions the agent was approved to execute. Recording DENY would let denial-spam inflate scores artificially. |
+| D20 | Risk tracker module location | `pdp/risk_tracker.py` | Extend rate limiter, inline in engine | Separate module follows rate limiter pattern for consistency. Different concern despite similar structure. |
+| D21 | Ticket ID as first-class audit field | Dedicated `ticket_id` field on AuditEvent | In `context` dict, in `params` | First-class field is queryable, filterable, and visible in audit exports. Same pattern as `correlation_id`. Compliance auditors need to answer "was there a ticket?" without parsing nested dicts. |
+
 ## Future Architecture (Phase 2+)
 
 When enforcement is added:

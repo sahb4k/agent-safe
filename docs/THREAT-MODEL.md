@@ -41,6 +41,7 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **MVP Control**: Audit log records the DENY. If paired with K8s audit logs, the discrepancy is detectable. Document this as a known limitation.
 - **Phase 1.5 Control (Implemented)**: Execution tickets — PDP issues signed, time-limited, single-use JWT on ALLOW. Executors validate ticket before acting. Agent bypass is detectable (action without valid ticket).
 - **Future Control (Phase 2+)**: Credential gating — agent never holds target credentials. Runner retrieves creds from vault only after ticket validation. Can't act without PDP approval.
+- **Compliance Control (Implemented)**: Ticket/incident linkage — actions can reference an external change ticket (`ticket_id`). Policies can require a ticket via `require_ticket: true`. Audit log records ticket IDs as a first-class field, enabling auditors to verify "was there an approved change request?" for every action.
 
 ### T2: Prompt Injection → Policy Evasion
 - **Preconditions**: LLM-based agent receives adversarial input (from a ticket, email, log message, user input) that manipulates it into requesting a dangerous action framed as benign.
@@ -90,7 +91,8 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **Impact**: Agent achieves something no single policy would allow.
 - **Likelihood**: MEDIUM — depends on action catalogue breadth and policy granularity.
 - **MVP Control**: Risk classification should account for sensitive actions regardless of target (e.g., `exec-pod` is always HIGH risk, `get-secret` is always HIGH risk). Policy can match on action risk class.
-- **Future Control (Phase 2)**: Cumulative risk scoring. Session-level policy evaluation tracks action sequences and escalates when cumulative risk exceeds threshold.
+- **Phase 2 Control (Implemented)**: Cumulative risk scoring — per-caller sliding window tracks risk scores for non-DENY decisions. When cumulative score exceeds `escalation_threshold`, ALLOW → REQUIRE_APPROVAL. When score exceeds `deny_threshold`, any non-DENY → DENY. Configurable scores per risk class, window duration (default 1 hour). Thread-safe.
+- **Future Enhancement**: Sequence-aware scoring that detects specific dangerous patterns (e.g., read-secret → exec-pod) rather than just numeric accumulation.
 
 ### T8: TOCTOU — State Changes Between Check and Action
 - **Preconditions**: Advisory mode — agent checks, then acts. Time gap between check and action.
@@ -141,11 +143,32 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **Phase 1.5 Control (Implemented)**: HMAC-SHA256 signing with `type: "execution-ticket"` claim (prevents cross-use with identity JWTs). Single-use nonce tracking (thread-safe set). Short TTL (default 5 min). Validator checks signature, expiry, issuer, nonce, and action/target match.
 - **Future Control**: Asymmetric signing (RSA/ECDSA) — signing key never leaves PDP. SPIFFE-based ticket binding to workload identity.
 
+### T14: Delegation Chain Abuse
+- **Preconditions**: Multi-agent delegation is enabled. Agent can create delegation tokens.
+- **Attack**: Agent delegates to itself or creates circular chains to bypass depth limits. Or agent creates a chain of "puppet" agents to launder its identity.
+- **Impact**: Delegation provenance tracking is undermined. Agent may bypass delegation-aware policies.
+- **Likelihood**: LOW — depth limit enforced at token creation, chain is append-only in JWT.
+- **Control (Implemented)**: Max delegation depth enforced in `create_delegation_token()`. Chain is stored in signed JWT — cannot be modified without key. Each hop appends the parent's full identity. PDP can match on full chain via `delegated_from`.
+
+### T15: Delegation Privilege Escalation
+- **Preconditions**: Multi-agent delegation is enabled.
+- **Attack**: Child agent requests roles or groups that the parent does not hold, effectively escalating privileges through delegation.
+- **Impact**: Agent gains access beyond what its delegator was authorized for.
+- **Likelihood**: LOW — strict subset enforcement at token creation.
+- **Control (Implemented)**: `create_delegation_token()` enforces strict subset: `child_roles ⊆ parent.roles`, `child_groups ⊆ parent.groups`. JWT signature prevents tampering with roles post-creation. PDP validates roles from the signed JWT.
+
+### T16: Delegation Token Replay
+- **Preconditions**: Attacker intercepts a delegation token.
+- **Attack**: Replay a delegation token to impersonate the delegated agent.
+- **Impact**: Unauthorized agent acts with the delegated identity.
+- **Likelihood**: LOW — tokens have short TTL (capped at parent's remaining lifetime).
+- **Control (Implemented)**: Standard JWT expiry validation. TTL capped at parent's remaining lifetime (child cannot outlive parent). Execution tickets add another layer of single-use nonce protection for actual actions.
+
 ---
 
 ## Risk Summary
 
-| Threat | Phase 1.5 Likelihood | Impact | Post-Enforcement Likelihood | Priority |
+| Threat | Phase 2.1 Likelihood | Impact | Post-Enforcement Likelihood | Priority |
 |--------|---------------------|--------|---------------------------|----------|
 | T1: PDP Bypass | HIGH (advisory) | HIGH | LOW (cred gating) | Mitigate (tickets) |
 | T2: Prompt Injection | MEDIUM | HIGH | MEDIUM (Runner helps) | Monitor |
@@ -153,10 +176,13 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 | T4: Policy Tamper | LOW-MED | HIGH | LOW-MED | Mitigate (git + review) |
 | T5: Audit Tamper | LOW (shipping) | HIGH | LOW | Mitigated (hash chain + shippers) |
 | T6: DoS Flooding | LOW (rate limits) | MEDIUM | LOW | Mitigated (rate limiter + circuit breaker) |
-| T7: Action Chaining | MEDIUM | HIGH | MEDIUM | Mitigate (risk classification) |
+| T7: Action Chaining | LOW (cumulative risk) | HIGH | LOW | Mitigated (cumulative risk scoring) |
 | T8: TOCTOU | LOW (tickets) | MEDIUM | LOW | Mitigated (ticket TTL + nonce) |
 | T9: Data Exfil | MEDIUM | HIGH | MEDIUM | Mitigate (policy on reads) |
 | T10: Supply Chain | N/A (no Runner) | N/A | MEDIUM | Future |
 | T11: Identity Spoof | LOW-MED | HIGH | LOW (SPIFFE) | Mitigate (JWT signing) |
 | T12: Rollback Vuln | N/A (no Runner) | N/A | LOW | Future |
 | T13: Ticket Forgery | LOW | HIGH | LOW (asymmetric) | Mitigate (HMAC + nonce + TTL) |
+| T14: Delegation Chain Abuse | LOW | MEDIUM | LOW | Mitigated (depth limit + JWT sig) |
+| T15: Delegation Priv Escalation | LOW | HIGH | LOW | Mitigated (strict subset + JWT sig) |
+| T16: Delegation Token Replay | LOW | MEDIUM | LOW | Mitigated (TTL inheritance + expiry) |

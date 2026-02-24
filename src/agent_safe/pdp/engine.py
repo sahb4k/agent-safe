@@ -34,6 +34,7 @@ from agent_safe.models import (
     TargetDefinition,
     compute_effective_risk,
 )
+from agent_safe.pdp.risk_tracker import CumulativeRiskResult, CumulativeRiskTracker
 from agent_safe.ratelimit.limiter import RateLimiter
 from agent_safe.registry.loader import ActionRegistry
 from agent_safe.tickets.issuer import TicketIssuer
@@ -98,12 +99,14 @@ class PolicyDecisionPoint:
         audit_logger: AuditLogger | None = None,
         ticket_issuer: TicketIssuer | None = None,
         rate_limiter: RateLimiter | None = None,
+        risk_tracker: CumulativeRiskTracker | None = None,
     ) -> None:
         self._rules = sorted(rules, key=lambda r: r.priority, reverse=True)
         self._registry = registry
         self._audit = audit_logger
         self._ticket_issuer = ticket_issuer
         self._rate_limiter = rate_limiter
+        self._risk_tracker = risk_tracker
 
     @property
     def rules(self) -> list[PolicyRule]:
@@ -116,6 +119,7 @@ class PolicyDecisionPoint:
         caller: AgentIdentity | None,
         params: dict[str, Any] | None = None,
         timestamp: datetime | None = None,
+        ticket_id: str | None = None,
     ) -> Decision:
         """Evaluate a policy decision for an action request.
 
@@ -146,6 +150,23 @@ class PolicyDecisionPoint:
 
         caller_id = caller.agent_id if caller else "anonymous"
 
+        # Build delegation context for audit (v0.3.0)
+        delegation_context: dict[str, Any] | None = None
+        if caller is not None and caller.delegation_depth > 0:
+            delegation_context = {
+                "delegation_depth": caller.delegation_depth,
+                "delegation_chain": [
+                    {"agent_id": link.agent_id, "agent_name": link.agent_name}
+                    for link in caller.delegation_chain
+                ],
+                "delegated_roles": list(caller.delegated_roles),
+                "original_caller": (
+                    caller.delegation_chain[0].agent_id
+                    if caller.delegation_chain
+                    else caller.agent_id
+                ),
+            }
+
         # Validate params if action is known
         param_errors: list[str] = []
         if action_def is not None and params:
@@ -167,10 +188,12 @@ class PolicyDecisionPoint:
                     effective_risk=effective_risk,
                     policy_matched=None,
                     audit_id=audit_id,
+                    ticket_id=ticket_id,
                 )
                 if self._audit is not None:
                     self._audit.log_decision(
-                        decision, params=params, timestamp=timestamp
+                        decision, params=params, timestamp=timestamp,
+                        context=delegation_context,
                     )
                 return decision
 
@@ -188,6 +211,7 @@ class PolicyDecisionPoint:
                 effective_risk=effective_risk,
                 policy_matched=None,
                 audit_id=audit_id,
+                ticket_id=ticket_id,
             )
 
         # If params are invalid, deny
@@ -202,13 +226,15 @@ class PolicyDecisionPoint:
                 effective_risk=effective_risk,
                 policy_matched=None,
                 audit_id=audit_id,
+                ticket_id=ticket_id,
             )
 
         # Evaluate rules — first match wins
         if decision is None:
             for rule in self._rules:
                 if _rule_matches(
-                    rule.match, action, target, caller, effective_risk, timestamp
+                    rule.match, action, target, caller, effective_risk, timestamp,
+                    ticket_id,
                 ):
                     decision = Decision(
                         result=rule.decision,
@@ -220,6 +246,7 @@ class PolicyDecisionPoint:
                         effective_risk=effective_risk,
                         policy_matched=rule.name,
                         audit_id=audit_id,
+                        ticket_id=ticket_id,
                     )
                     break
 
@@ -235,16 +262,74 @@ class PolicyDecisionPoint:
                 effective_risk=effective_risk,
                 policy_matched=None,
                 audit_id=audit_id,
+                ticket_id=ticket_id,
             )
+
+        # Cumulative risk escalation (post-policy, pre-audit)
+        cumulative_result: CumulativeRiskResult | None = None
+        if self._risk_tracker is not None and decision.result != DecisionResult.DENY:
+            cumulative_result = self._risk_tracker.record_and_evaluate(
+                caller_id, effective_risk,
+            )
+            escalation = self._risk_tracker.should_escalate(
+                cumulative_result.cumulative_score,
+            )
+
+            if escalation == "deny":
+                original_result = decision.result
+                decision = decision.model_copy(update={
+                    "result": DecisionResult.DENY,
+                    "reason": (
+                        f"Cumulative risk threshold exceeded "
+                        f"({cumulative_result.cumulative_score} >= "
+                        f"{self._risk_tracker.config.deny_threshold}). "
+                        f"Original: {decision.reason}"
+                    ),
+                    "cumulative_risk_score": cumulative_result.cumulative_score,
+                    "cumulative_risk_class": cumulative_result.cumulative_risk_class,
+                    "escalated_from": original_result,
+                })
+            elif escalation == "escalate" and decision.result == DecisionResult.ALLOW:
+                decision = decision.model_copy(update={
+                    "result": DecisionResult.REQUIRE_APPROVAL,
+                    "reason": (
+                        f"Escalated by cumulative risk "
+                        f"({cumulative_result.cumulative_score} >= "
+                        f"{self._risk_tracker.config.escalation_threshold}). "
+                        f"Original: {decision.reason}"
+                    ),
+                    "cumulative_risk_score": cumulative_result.cumulative_score,
+                    "cumulative_risk_class": cumulative_result.cumulative_risk_class,
+                    "escalated_from": DecisionResult.ALLOW,
+                })
+            else:
+                decision = decision.model_copy(update={
+                    "cumulative_risk_score": cumulative_result.cumulative_score,
+                    "cumulative_risk_class": cumulative_result.cumulative_risk_class,
+                })
 
         # Record DENY for circuit breaker tracking
         if self._rate_limiter is not None and decision.result == DecisionResult.DENY:
             self._rate_limiter.record_deny(caller_id)
 
+        # Build combined audit context
+        audit_context = delegation_context
+        if cumulative_result is not None:
+            cumulative_ctx: dict[str, Any] = {
+                "cumulative_risk_score": cumulative_result.cumulative_score,
+                "cumulative_risk_class": cumulative_result.cumulative_risk_class.value,
+                "cumulative_entry_count": cumulative_result.entry_count,
+                "cumulative_window_seconds": cumulative_result.window_seconds,
+            }
+            if decision.escalated_from is not None:
+                cumulative_ctx["escalated_from"] = decision.escalated_from.value
+            audit_context = {**(audit_context or {}), **cumulative_ctx}
+
         # Auto-log to audit trail
         if self._audit is not None:
             self._audit.log_decision(
-                decision, params=params, timestamp=timestamp
+                decision, params=params, timestamp=timestamp,
+                context=audit_context,
             )
 
         # Issue execution ticket for ALLOW decisions
@@ -271,6 +356,7 @@ def _rule_matches(
     caller: AgentIdentity | None,
     effective_risk: RiskClass,
     timestamp: datetime,
+    ticket_id: str | None = None,
 ) -> bool:
     """Check if a policy rule's match conditions apply to this request.
 
@@ -289,7 +375,17 @@ def _rule_matches(
     if match.risk_classes is not None and effective_risk not in match.risk_classes:
         return False
 
-    return not (match.time_windows is not None and not _time_matches(match.time_windows, timestamp))
+    if match.time_windows is not None and not _time_matches(match.time_windows, timestamp):
+        return False
+
+    if match.require_ticket is not None:
+        has_ticket = ticket_id is not None and ticket_id != ""
+        if match.require_ticket and not has_ticket:
+            return False
+        if not match.require_ticket and has_ticket:
+            return False
+
+    return True
 
 
 def _actions_match(patterns: list[str], action: str) -> bool:
@@ -332,6 +428,23 @@ def _caller_matches(selector: Any, caller: AgentIdentity | None) -> bool:
 
     if selector.groups is not None:
         if not any(g in caller.groups for g in selector.groups):
+            return False
+
+    # Delegation checks (v0.3.0)
+    if selector.delegated_from is not None:
+        chain_ids = {link.agent_id for link in caller.delegation_chain}
+        if not any(did in chain_ids for did in selector.delegated_from):
+            return False
+
+    if selector.max_delegation_depth is not None:
+        if caller.delegation_depth > selector.max_delegation_depth:
+            return False
+
+    if selector.require_delegation is not None:
+        is_delegated = caller.delegation_depth > 0
+        if selector.require_delegation and not is_delegated:
+            return False
+        if not selector.require_delegation and is_delegated:
             return False
 
     return True

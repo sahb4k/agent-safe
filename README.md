@@ -150,6 +150,11 @@ def agent_step(action, target, params):
 | **Execution Tickets** | Signed, time-limited, single-use tokens issued on ALLOW decisions. Bridges advisory to enforceable authorization. |
 | **Rate Limiting** | Per-caller request throttling with sliding window. Circuit breaker auto-pauses agents that trigger too many denials. |
 | **Audit Shipping** | Ship audit events to external immutable storage (S3, webhooks, filesystem) in real-time. |
+| **Credential Gating** | Agents never hold target credentials. JIT scoped credentials via vault after ticket validation. |
+| **Approval Workflows** | REQUIRE_APPROVAL triggers trackable requests with webhook/Slack notifications. |
+| **Multi-Agent Delegation** | Orchestrator agents delegate to workers with chain tracking, scope narrowing, and delegation-aware policies. |
+| **Cumulative Risk Scoring** | Per-caller session risk tracking. Escalates decisions when action chaining accumulates too much risk (T7 mitigation). |
+| **Ticket/Incident Linkage** | Link actions to external change tickets (JIRA, ServiceNow, etc.). Policies can require tickets. First-class audit field for compliance. |
 | **Context-Aware Risk** | Risk = f(action risk, target sensitivity). A medium action on a critical target = critical effective risk. |
 
 ## Key Design Decisions
@@ -287,6 +292,119 @@ safe = AgentSafe(
 )
 ```
 
+## Multi-Agent Delegation
+
+When orchestrator agents delegate sub-tasks to workers, delegation chains track provenance:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    signing_key="shared-secret-key",
+)
+
+# Create parent identity
+parent_token = safe.identity.create_token(
+    agent_id="orchestrator-01",
+    roles=["deployer", "reader"],
+)
+
+# Delegate to a worker with narrowed scope
+result = safe.delegate(
+    parent_token=parent_token,
+    child_agent_id="worker-01",
+    child_roles=["deployer"],  # Must be subset of parent's roles
+)
+
+# Worker uses delegation token for checks
+decision = safe.check(
+    action="restart-deployment",
+    target="dev/test-app",
+    caller=result.token,  # Carries full delegation chain
+)
+```
+
+Delegation-aware policies control who can delegate and to what depth:
+
+```yaml
+rules:
+  - name: allow-delegated-from-orchestrator
+    match:
+      callers:
+        delegated_from: [orchestrator-01]
+        max_delegation_depth: 2
+    decision: allow
+    reason: Delegated from trusted orchestrator
+```
+
+## Cumulative Risk Scoring
+
+Prevent privilege escalation via action chaining by tracking per-caller risk over time:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    inventory="./inventory.yaml",
+    cumulative_risk={
+        "window_seconds": 3600,             # 1 hour sliding window
+        "escalation_threshold": 30,          # ALLOW → REQUIRE_APPROVAL
+        "deny_threshold": 75,                # Any → DENY
+        "risk_scores": {"low": 1, "medium": 5, "high": 15, "critical": 50},
+    },
+)
+
+# Individual low-risk actions are fine
+d1 = safe.check("get-configmap", target="dev/test-app", caller="agent-01",
+                 params={"namespace": "dev", "configmap": "cfg"})
+# d1.result = ALLOW, d1.cumulative_risk_score = 1
+
+# But chaining high-risk actions triggers escalation
+d2 = safe.check("exec-pod", target="dev/debug-pod", caller="agent-01",
+                 params={"namespace": "dev", "pod": "p", "command": ["ls"]})
+d3 = safe.check("get-secret", target="dev/test-app", caller="agent-01",
+                 params={"namespace": "dev", "secret": "db-creds"})
+# d3.escalated_from = ALLOW → REQUIRE_APPROVAL due to cumulative risk
+```
+
+## Ticket/Incident Linkage
+
+Link actions to external change management tickets for compliance:
+
+```python
+# SDK — pass ticket_id to check()
+decision = safe.check(
+    action="restart-deployment",
+    target="prod/api-server",
+    caller="deploy-agent-01",
+    params={"namespace": "prod", "deployment": "api-server"},
+    ticket_id="JIRA-1234",  # Links to external ticket
+)
+print(decision.ticket_id)  # "JIRA-1234" — also in audit log
+```
+
+```bash
+# CLI — use --ticket-id
+agent-safe check restart-deployment \
+    --target prod/api-server \
+    --params '{"namespace": "prod", "deployment": "api"}' \
+    --ticket-id JIRA-1234
+```
+
+Policies can require a ticket for certain actions:
+
+```yaml
+rules:
+  - name: require-ticket-prod
+    priority: 500
+    match:
+      targets:
+        environments: [prod]
+      require_ticket: true
+    decision: allow
+    reason: Production changes allowed with ticket
+```
+
 ## Policy Testing
 
 Validate your policies against expected outcomes:
@@ -308,6 +426,11 @@ agent-safe test ./tests/ --registry ./actions --policies ./policies
 | `agent-safe audit show <log>` | Show audit entries |
 | `agent-safe audit ship <log>` | Ship audit events to external backend |
 | `agent-safe ticket verify <token>` | Verify a signed execution ticket |
+| `agent-safe credential resolve <token>` | Resolve credentials for a valid ticket |
+| `agent-safe credential test-vault` | Test vault connectivity |
+| `agent-safe approval list/show/approve/deny` | Manage approval requests |
+| `agent-safe delegation create <token>` | Create a delegation token for a sub-agent |
+| `agent-safe delegation verify <token>` | Verify a delegation token and display chain |
 
 ## Docker (Sidecar)
 
@@ -329,14 +452,12 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.2.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit log shipping, and policy testing framework are complete and tested. 376 tests passing.
+**Alpha** (v0.5.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, and ticket/incident linkage are complete and tested. 610 tests passing.
 
 What's next (Phase 2):
-- Human approval workflows (Slack, webhooks)
-- Cumulative risk scoring
-- K8s Runner / Executor
 - Before/after state capture and rollback
-- Web dashboard for audit trail
+- K8s Runner / Executor
+- Web dashboard (Phase 2.5)
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
 

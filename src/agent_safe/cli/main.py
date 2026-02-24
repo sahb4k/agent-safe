@@ -291,6 +291,10 @@ def test_policies(
     "--approval-store", default=None,
     help="Path to approval store file",
 )
+@click.option(
+    "--ticket-id", default=None,
+    help="External ticket/incident ID (e.g., JIRA-1234)",
+)
 def check(
     action: str,
     target: str | None,
@@ -303,6 +307,7 @@ def check(
     json_output: bool,
     signing_key: str | None,
     approval_store: str | None,
+    ticket_id: str | None,
 ) -> None:
     """Evaluate a policy decision for an action."""
     parsed_params: dict[str, Any] | None = None
@@ -333,6 +338,7 @@ def check(
         target=target,
         caller=caller,
         params=parsed_params,
+        ticket_id=ticket_id,
     )
 
     if json_output:
@@ -353,12 +359,23 @@ def check(
         click.echo(f"  caller: {decision.caller}")
         click.echo(f"  risk:   {decision.effective_risk}")
         click.echo(f"  audit:  {decision.audit_id}")
+        if decision.ticket_id:
+            click.echo(f"  ticket_id: {decision.ticket_id}")
         if decision.policy_matched:
             click.echo(f"  policy: {decision.policy_matched}")
         if decision.ticket:
             click.echo(f"  ticket: {decision.ticket.token[:40]}...")
             click.echo(f"  nonce:  {decision.ticket.nonce}")
             click.echo(f"  expires: {decision.ticket.expires_at.isoformat()}")
+        if decision.cumulative_risk_score is not None:
+            click.echo(
+                f"  cumulative: {decision.cumulative_risk_score}"
+                f" ({decision.cumulative_risk_class})"
+            )
+        if decision.escalated_from is not None:
+            click.echo(
+                f"  escalated:  {decision.escalated_from} → {decision.result}"
+            )
         if decision.request_id:
             click.echo(f"  request: {decision.request_id}")
             click.echo(
@@ -1060,6 +1077,157 @@ def credential_test_vault(
             + f" — {exc}",
         )
         sys.exit(1)
+
+
+# --- delegation group ---
+
+
+@cli.group()
+def delegation() -> None:
+    """Multi-agent delegation commands."""
+
+
+@delegation.command("create")
+@click.argument("parent_token")
+@click.option("--child-id", required=True, help="Child agent ID")
+@click.option("--child-name", default="", help="Child agent display name")
+@click.option("--roles", default=None, help="Comma-separated roles to delegate")
+@click.option("--groups", default=None, help="Comma-separated groups to delegate")
+@click.option("--ttl", default=None, type=int, help="Token TTL in seconds")
+@click.option("--max-depth", default=5, type=int, help="Max delegation depth")
+@click.option("--signing-key", required=True, help="HMAC signing key")
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def delegation_create(
+    parent_token: str,
+    child_id: str,
+    child_name: str,
+    roles: str | None,
+    groups: str | None,
+    ttl: int | None,
+    max_depth: int,
+    signing_key: str,
+    json_output: bool,
+) -> None:
+    """Create a delegation token for a sub-agent."""
+    from datetime import timedelta
+
+    from agent_safe.identity.manager import DelegationError, IdentityManager
+
+    mgr = IdentityManager(signing_key)
+
+    child_roles = [r.strip() for r in roles.split(",")] if roles else None
+    child_groups = [g.strip() for g in groups.split(",")] if groups else None
+    ttl_delta = timedelta(seconds=ttl) if ttl is not None else None
+
+    try:
+        token = mgr.create_delegation_token(
+            parent_token=parent_token,
+            child_agent_id=child_id,
+            child_agent_name=child_name,
+            child_roles=child_roles,
+            child_groups=child_groups,
+            ttl=ttl_delta,
+            max_depth=max_depth,
+        )
+    except DelegationError as exc:
+        click.echo(
+            click.style("ERROR", fg="red", bold=True) + f" — {exc}",
+        )
+        sys.exit(1)
+
+    if json_output:
+        identity = mgr.validate_token(token)
+        data = {
+            "token": token,
+            "child_agent_id": child_id,
+            "delegation_depth": identity.delegation_depth,
+            "delegated_roles": identity.delegated_roles,
+            "delegation_chain": [
+                {"agent_id": link.agent_id, "agent_name": link.agent_name}
+                for link in identity.delegation_chain
+            ],
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        identity = mgr.validate_token(token)
+        click.echo(
+            click.style("OK", fg="green", bold=True)
+            + f" — delegation token created for {child_id}",
+        )
+        click.echo(f"  depth:  {identity.delegation_depth}")
+        click.echo(f"  roles:  {identity.delegated_roles}")
+        click.echo(f"  chain:  {[link.agent_id for link in identity.delegation_chain]}")
+        click.echo(f"  token:  {token[:40]}...")
+
+
+@delegation.command("verify")
+@click.argument("token")
+@click.option("--signing-key", required=True, help="HMAC signing key")
+@click.option("--issuer", default="agent-safe", help="Expected issuer")
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def delegation_verify(
+    token: str,
+    signing_key: str,
+    issuer: str,
+    json_output: bool,
+) -> None:
+    """Verify a delegation token and display the chain."""
+    from agent_safe.identity.manager import IdentityManager
+
+    mgr = IdentityManager(signing_key, issuer=issuer)
+    identity = mgr.validate_token_or_none(token)
+
+    if identity is None:
+        click.echo(
+            click.style("INVALID", fg="red", bold=True)
+            + " — token is invalid or expired",
+        )
+        sys.exit(1)
+
+    if json_output:
+        data = {
+            "agent_id": identity.agent_id,
+            "agent_name": identity.agent_name,
+            "roles": identity.roles,
+            "groups": identity.groups,
+            "delegation_depth": identity.delegation_depth,
+            "delegated_roles": identity.delegated_roles,
+            "delegation_chain": [
+                {
+                    "agent_id": link.agent_id,
+                    "agent_name": link.agent_name,
+                    "roles": link.roles,
+                    "delegated_at": link.delegated_at.isoformat(),
+                }
+                for link in identity.delegation_chain
+            ],
+            "issued_at": identity.issued_at.isoformat() if identity.issued_at else None,
+            "expires_at": identity.expires_at.isoformat() if identity.expires_at else None,
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        is_delegated = identity.delegation_depth > 0
+        label = "DELEGATED" if is_delegated else "DIRECT"
+        color = "cyan" if is_delegated else "green"
+
+        click.echo(
+            click.style(label, fg=color, bold=True)
+            + f" — {identity.agent_id}",
+        )
+        click.echo(f"  name:   {identity.agent_name}")
+        click.echo(f"  roles:  {identity.roles}")
+        click.echo(f"  groups: {identity.groups}")
+        click.echo(f"  depth:  {identity.delegation_depth}")
+        if is_delegated:
+            click.echo(f"  delegated_roles: {identity.delegated_roles}")
+            click.echo("  chain:")
+            for i, link in enumerate(identity.delegation_chain):
+                click.echo(
+                    f"    [{i}] {link.agent_id}"
+                    + (f" ({link.agent_name})" if link.agent_name else "")
+                    + f"  roles={link.roles}"
+                    + f"  at={link.delegated_at.isoformat()[:19]}"
+                )
 
 
 def _parse_vault_creds(

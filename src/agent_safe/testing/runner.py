@@ -50,6 +50,7 @@ class TestCase:
     params: dict[str, Any] | None = None
     expect: str = ""  # "allow", "deny", or "require_approval"
     source_file: str = ""
+    ticket_id: str | None = None
 
 
 @dataclass
@@ -137,6 +138,7 @@ def load_test_file(path: Path) -> list[TestCase]:
             params=entry.get("params"),
             expect=expect,
             source_file=str(path),
+            ticket_id=entry.get("ticket_id"),
         ))
 
     return cases
@@ -189,6 +191,7 @@ def run_tests(safe: AgentSafe, cases: list[TestCase]) -> TestSuiteResult:
             target=case.target,
             caller=case.caller,
             params=case.params,
+            ticket_id=case.ticket_id,
         )
 
         expected = expect_map[case.expect]

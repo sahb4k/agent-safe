@@ -37,7 +37,7 @@ from agent_safe.audit.logger import AuditLogger
 from agent_safe.audit.shipper import AuditShipper, build_shippers
 from agent_safe.credentials.resolver import CredentialResolver
 from agent_safe.credentials.vault import CredentialVault, build_vault
-from agent_safe.identity.manager import IdentityManager
+from agent_safe.identity.manager import DelegationError, IdentityManager
 from agent_safe.inventory.loader import Inventory, load_inventory
 from agent_safe.models import (
     AgentIdentity,
@@ -47,10 +47,12 @@ from agent_safe.models import (
     CredentialResult,
     Decision,
     DecisionResult,
+    DelegationResult,
     ExecutionTicket,
     RiskClass,
 )
 from agent_safe.pdp.engine import PolicyDecisionPoint, load_policies
+from agent_safe.pdp.risk_tracker import CumulativeRiskConfig, CumulativeRiskTracker
 from agent_safe.ratelimit.limiter import RateLimitConfig, RateLimiter
 from agent_safe.registry.loader import ActionRegistry, load_registry
 from agent_safe.tickets.issuer import TicketIssuer
@@ -81,6 +83,7 @@ class AgentSafe:
         approval_ttl: timedelta | int | None = None,
         approval_notifiers: list[ApprovalNotifier] | dict | None = None,
         credential_vault: CredentialVault | dict | None = None,
+        cumulative_risk: CumulativeRiskConfig | dict | None = None,
     ) -> None:
         """Initialize AgentSafe.
 
@@ -106,6 +109,10 @@ class AgentSafe:
             credential_vault: Credential vault for JIT credential scoping
                 (optional). Pass a CredentialVault instance, or a dict
                 to auto-build via ``build_vault()``.
+            cumulative_risk: Cumulative risk scoring config (optional).
+                Pass a CumulativeRiskConfig instance, or a dict with
+                keys: window_seconds, risk_scores, escalation_threshold,
+                deny_threshold.
         """
         self._registry: ActionRegistry = load_registry(registry)
         self._rules = load_policies(policies)
@@ -143,6 +150,12 @@ class AgentSafe:
             if isinstance(rate_limit, dict):
                 rate_limit = RateLimitConfig(**rate_limit)
             self._rate_limiter = RateLimiter(rate_limit)
+
+        self._risk_tracker: CumulativeRiskTracker | None = None
+        if cumulative_risk is not None:
+            if isinstance(cumulative_risk, dict):
+                cumulative_risk = CumulativeRiskConfig(**cumulative_risk)
+            self._risk_tracker = CumulativeRiskTracker(cumulative_risk)
 
         # Approval store
         self._approval_store: FileApprovalStore | None = None
@@ -186,6 +199,7 @@ class AgentSafe:
             audit_logger=self._audit,
             ticket_issuer=self._ticket_issuer,
             rate_limiter=self._rate_limiter,
+            risk_tracker=self._risk_tracker,
         )
 
     @property
@@ -211,6 +225,7 @@ class AgentSafe:
         params: dict[str, Any] | None = None,
         timestamp: datetime | None = None,
         correlation_id: str | None = None,
+        ticket_id: str | None = None,
     ) -> Decision:
         """Evaluate a policy decision for an action request.
 
@@ -245,6 +260,7 @@ class AgentSafe:
             caller=caller_identity,
             params=params,
             timestamp=timestamp,
+            ticket_id=ticket_id,
         )
 
         # Create approval request for REQUIRE_APPROVAL decisions
@@ -285,6 +301,7 @@ class AgentSafe:
                 caller=step.get("caller"),
                 params=step.get("params"),
                 timestamp=timestamp,
+                ticket_id=step.get("ticket_id"),
             )
             decisions.append(decision)
         return decisions
@@ -348,6 +365,90 @@ class AgentSafe:
         if self._credential_resolver is None:
             raise AgentSafeError("Credential vault is not configured.")
         self._credential_resolver.revoke(credential)
+
+    def delegate(
+        self,
+        parent_token: str,
+        child_agent_id: str,
+        child_agent_name: str = "",
+        child_roles: list[str] | None = None,
+        child_groups: list[str] | None = None,
+        ttl: int | None = None,
+        max_depth: int = 5,
+    ) -> DelegationResult:
+        """Create a delegation token for a sub-agent.
+
+        The parent agent delegates authority to a child agent. The child
+        receives a JWT carrying the delegation chain and a subset of
+        the parent's roles (scope narrowing).
+
+        Args:
+            parent_token: JWT of the delegating (parent) agent.
+            child_agent_id: Agent ID for the child agent.
+            child_agent_name: Display name for the child agent.
+            child_roles: Roles to grant (must be subset of parent's).
+            child_groups: Groups to grant (must be subset of parent's).
+            ttl: Token lifetime in seconds. Capped at parent's remaining TTL.
+            max_depth: Maximum delegation chain depth (default 5).
+
+        Returns:
+            DelegationResult with success/error and the child token.
+
+        Raises:
+            AgentSafeError: If identity manager is not configured.
+        """
+        if self._identity is None:
+            raise AgentSafeError(
+                "Identity manager is not configured. "
+                "Pass signing_key= to AgentSafe()."
+            )
+
+        ttl_delta = timedelta(seconds=ttl) if ttl is not None else None
+
+        try:
+            token = self._identity.create_delegation_token(
+                parent_token=parent_token,
+                child_agent_id=child_agent_id,
+                child_agent_name=child_agent_name,
+                child_roles=child_roles,
+                child_groups=child_groups,
+                ttl=ttl_delta,
+                max_depth=max_depth,
+            )
+        except DelegationError as exc:
+            return DelegationResult(
+                success=False,
+                error=str(exc),
+                parent_agent_id="",
+                child_agent_id=child_agent_id,
+            )
+
+        child_identity = self._identity.validate_token(token)
+        parent_identity = self._identity.validate_token(parent_token)
+
+        return DelegationResult(
+            success=True,
+            token=token,
+            child_identity=child_identity,
+            parent_agent_id=parent_identity.agent_id,
+            child_agent_id=child_agent_id,
+            delegation_depth=child_identity.delegation_depth,
+        )
+
+    def verify_delegation(self, token: str) -> AgentIdentity | None:
+        """Verify a delegation token and return the full identity with chain.
+
+        Returns None if the token is invalid or expired.
+
+        Raises:
+            AgentSafeError: If identity manager is not configured.
+        """
+        if self._identity is None:
+            raise AgentSafeError(
+                "Identity manager is not configured. "
+                "Pass signing_key= to AgentSafe()."
+            )
+        return self._identity.validate_token_or_none(token)
 
     @property
     def approval_store(self) -> FileApprovalStore | None:

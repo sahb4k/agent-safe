@@ -4,32 +4,35 @@
 Agent-Safe is an open-source governance/control layer for AI agents and non-human identities (NHIs).
 It is NOT an agent. It is the system that restricts and governs what agents are allowed to do.
 
-Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + SDK/CLI.
+Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + SDK/CLI.
 
 ## Key Decisions (Locked)
 - **Deployment**: Sidecar / library (runs in customer's environment, no cloud dependency)
 - **Target environment**: Kubernetes first (all action catalogues scoped to K8s API)
-- **Enforcement model**: Advisory + ticket-based. PDP returns ALLOW/DENY/REQUIRE_APPROVAL. ALLOW decisions include signed execution tickets. Rate limiting + circuit breaker protect against misbehaving agents.
+- **Enforcement model**: Advisory + ticket-based. PDP returns ALLOW/DENY/REQUIRE_APPROVAL. ALLOW decisions include signed execution tickets. Rate limiting + circuit breaker protect against misbehaving agents. Cumulative risk scoring escalates decisions when action chaining accumulates too much risk.
 - **GTM**: Open-source core (Apache 2.0), future paid tier (hosted dashboard, enterprise features)
 - **Tech stack**: Python (most agent frameworks are Python)
 - **License**: Apache 2.0
 
-## Architecture (Phase 1.5 — Current)
+## Architecture (Phase 2 — Current)
 ```
-Agent → SDK → Rate Limiter → PDP → ALLOW + signed Execution Ticket
-                               │         │
-                               │         ▼
-                               │  Executor validates ticket
-                               │  (TicketValidator: sig, expiry, nonce)
-                               ▼
-                         Audit Logger → Local file (source of truth)
-                               │
-                               ├──→ FilesystemShipper (backup file)
-                               ├──→ WebhookShipper (SIEM/log aggregator)
-                               └──→ S3Shipper (immutable storage)
+Agent → SDK → Rate Limiter → PDP → Policy Decision
+                                         │
+                                         ▼
+                                  Risk Tracker (post-policy escalation)
+                                    ├─ ALLOW + signed Execution Ticket
+                                    │    ├──→ Credential Resolver (JIT vault)
+                                    │    └──→ Delegation (chain in JWT)
+                                    ├─ REQUIRE_APPROVAL → Approval Store
+                                    └─ Cumulative risk context in audit
+                                         │
+                                         ▼
+                                   Audit Logger → Local file (source of truth)
+                                         ├──→ FilesystemShipper (backup file)
+                                         ├──→ WebhookShipper (SIEM/log aggregator)
+                                         └──→ S3Shipper (immutable storage)
 ```
-No Runner/Executor, no cloud infra, no credential management yet (Phase 2).
-Agents execute actions themselves. Agent-Safe decides, issues tickets, and logs.
+Agents execute actions themselves. Agent-Safe decides, issues tickets, manages credentials, handles approvals, tracks cumulative risk, and logs. Delegation chains tracked in JWT (stateless PDP preserved).
 
 ## Code Conventions
 - Python 3.11+
@@ -58,9 +61,11 @@ agent-safe/
 │       │   ├── logger.py   # Hash-chained JSONL logger
 │       │   └── shipper.py  # AuditShipper protocol + backends
 │       ├── inventory/      # Target inventory
-│       ├── identity/       # Agent identity (JWT)
+│       ├── identity/       # Agent identity (JWT) + delegation
 │       ├── tickets/        # Execution ticket issuer + validator
 │       ├── ratelimit/      # Per-caller rate limiting + circuit breaker
+│       ├── credentials/    # Credential vault protocol + resolver
+│       ├── approval/       # Approval workflows (store + notifiers)
 │       ├── sdk/            # Public SDK interface (AgentSafe class)
 │       └── cli/            # CLI entry point
 ├── actions/                # YAML action definitions (K8s)
@@ -85,20 +90,18 @@ agent-safe/
 4. **Sidecar, not SaaS** — decisions and data stay in the customer's environment
 5. **Advisory before enforced** — log and decide now, gate credentials later
 
-## What NOT to Build Yet (Phase 2 and beyond)
+## What NOT to Build Yet (Phase 2.5 and beyond)
 - No Runner/Executor (agents execute, we decide + issue tickets)
 - No cloud infrastructure (sidecar/library only)
-- No credential/secrets management (design doc done, implementation Phase 2)
-- No approval workflow UI (PDP returns REQUIRE_APPROVAL, handling is the caller's job)
 - No rollback automation
-- No multi-agent supervisor
 - No dashboard (Phase 2.5)
+- No agent supervisor (separate product decision)
 
 ## Documentation
 - `docs/MVP-PLAN.md` — 6–8 week detailed build plan (Phase 1)
-- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2 next)
+- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 in progress)
 - `docs/ARCHITECTURE.md` — Architecture decisions and diagrams
 - `docs/GETTING-STARTED.md` — Installation, quick start, SDK usage, all features
-- `docs/CREDENTIAL-SCOPING.md` — Vault-based credential gating design (Phase 2 implementation)
+- `docs/CREDENTIAL-SCOPING.md` — Vault-based credential gating design (implemented)
 - `docs/FUTURE-BACKLOG.md` — Cut items and future ideas (parking lot)
-- `docs/THREAT-MODEL.md` — Threat model and abuse cases (13 threats catalogued)
+- `docs/THREAT-MODEL.md` — Threat model and abuse cases (16 threats catalogued)

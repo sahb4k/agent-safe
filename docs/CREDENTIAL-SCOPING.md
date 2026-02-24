@@ -234,13 +234,27 @@ The `credentials` block in action YAML is optional. Actions without it work exac
 
 ---
 
-## Implementation Sequence (Phase 2)
+## Implementation Status
 
-1. `CredentialScope` and `Credential` models (Pydantic)
-2. `CredentialVault` protocol
-3. `KubernetesSecretsVault` backend (simplest, no external dependency)
-4. Runner skeleton (validates ticket, calls vault, executes K8s action)
-5. `HashiCorpVault` backend
-6. Audit integration (log credential lifecycle events)
-7. CLI: `agent-safe credential test` (verify vault connectivity and scope)
-8. Documentation and examples
+Steps 1-2, 6-8 are **implemented** in v0.3.0 with `EnvVarVault` as the dev/test backend:
+
+1. ~~`CredentialScope` and `Credential` models (Pydantic)~~ ✅
+2. ~~`CredentialVault` protocol~~ ✅
+3. `KubernetesSecretsVault` backend — **future**
+4. Runner skeleton — **future**
+5. `HashiCorpVault` backend — **future**
+6. ~~Audit integration~~ ✅
+7. ~~CLI: `agent-safe credential resolve/test-vault`~~ ✅
+8. ~~Documentation and examples~~ ✅
+
+## Delegation and Credential Scoping
+
+When orchestrator agents delegate to workers, credential scope is automatically narrowed through two layers:
+
+1. **Identity layer**: Delegation tokens carry a strict subset of the parent's roles (enforced at creation time by `create_delegation_token()`). Workers cannot request roles the parent doesn't hold.
+
+2. **Policy layer**: Delegation-aware policies (`delegated_from`, `max_delegation_depth`, `require_delegation`) control which delegated callers can access which actions. The PDP evaluates the worker's identity with delegation context.
+
+3. **Credential layer**: The credential resolver resolves credentials based on the action definition's `CredentialScope`, not the caller's identity. Since the PDP already approved the action for the delegated caller, the credential scope is implicitly narrowed — workers only get credentials for actions they were approved to execute.
+
+This layered approach means the credential resolver does not need delegation awareness. Scope narrowing is enforced by identity (subset roles) + policy (delegation-aware matching) + credential resolver (action-scoped credentials).

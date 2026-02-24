@@ -215,6 +215,116 @@ safe = AgentSafe(
 
 When a caller exceeds the rate limit, `check()` returns DENY with a reason like `"Rate limit exceeded for caller 'agent-01': 50 requests per 60s window."` The circuit breaker auto-pauses agents that trigger too many denials.
 
+## Cumulative Risk Scoring
+
+Prevent privilege escalation via action chaining (Threat T7). When an agent chains individually low-risk actions to achieve a high-risk outcome, cumulative risk scoring escalates decisions:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    inventory="./inventory.yaml",
+    cumulative_risk={
+        "window_seconds": 3600,             # 1 hour sliding window
+        "escalation_threshold": 30,          # ALLOW → REQUIRE_APPROVAL
+        "deny_threshold": 75,                # Any non-DENY → DENY
+        "risk_scores": {                     # Points per risk class
+            "low": 1, "medium": 5, "high": 15, "critical": 50,
+        },
+    },
+)
+```
+
+How it works:
+- Each non-DENY `check()` call records the effective risk score for the caller
+- Scores accumulate within a sliding time window
+- When cumulative score reaches `escalation_threshold`, ALLOW decisions become REQUIRE_APPROVAL
+- When cumulative score reaches `deny_threshold`, all non-DENY decisions become DENY
+- Every decision includes `cumulative_risk_score` and `cumulative_risk_class` for visibility
+- DENY decisions do not accumulate risk (the action wasn't approved)
+
+```python
+decision = safe.check("exec-pod", target="dev/debug-pod", caller="agent-01",
+                       params={"namespace": "dev", "pod": "p", "command": ["ls"]})
+print(decision.cumulative_risk_score)   # Current score in window
+print(decision.cumulative_risk_class)   # low/medium/high/critical
+print(decision.escalated_from)          # Original decision if escalated (e.g., "allow")
+```
+
+Note: Cumulative risk is tracked in-memory per SDK instance. It's designed for long-running agent processes, not one-shot CLI calls.
+
+## Ticket/Incident Linkage
+
+Link actions to external change management tickets (JIRA, ServiceNow, PagerDuty) for compliance tracing:
+
+```python
+# Pass a ticket ID with any check
+decision = safe.check(
+    action="restart-deployment",
+    target="prod/api-server",
+    caller="deploy-agent-01",
+    params={"namespace": "prod", "deployment": "api-server"},
+    ticket_id="JIRA-1234",
+)
+
+print(decision.ticket_id)  # "JIRA-1234"
+# Also recorded in the audit log as a first-class field
+```
+
+Policies can require a ticket for specific actions or environments:
+
+```yaml
+rules:
+  # Production changes require a ticket
+  - name: allow-prod-with-ticket
+    priority: 500
+    match:
+      targets:
+        environments: [prod]
+      require_ticket: true
+    decision: allow
+    reason: Production changes allowed with change ticket
+
+  # Without a ticket, deny prod
+  - name: deny-prod-no-ticket
+    priority: 400
+    match:
+      targets:
+        environments: [prod]
+      require_ticket: false
+    decision: deny
+    reason: Production changes require a change ticket
+```
+
+The `require_ticket` field supports three states:
+- `true` — rule only matches when `ticket_id` is provided
+- `false` — rule only matches when `ticket_id` is NOT provided
+- `null`/omitted — rule matches regardless of ticket presence
+
+From the CLI:
+
+```bash
+agent-safe check restart-deployment \
+    --target prod/api-server \
+    --params '{"namespace": "prod", "deployment": "api"}' \
+    --ticket-id JIRA-1234
+```
+
+Ticket IDs also work in batch plan checking:
+
+```python
+decisions = safe.check_plan([
+    {
+        "action": "restart-deployment",
+        "target": "prod/api-server",
+        "params": {"namespace": "prod", "deployment": "api"},
+        "ticket_id": "JIRA-1234",  # Per-step ticket ID
+    },
+])
+```
+
+The ticket ID is opaque to Agent-Safe — it can be a JIRA key, ServiceNow incident number, URL, or any string. Validation of the ticket's existence is the caller's responsibility.
+
 ## Audit Log
 
 Every `check()` call is logged to an append-only, hash-chained audit file:
@@ -263,6 +373,55 @@ safe = AgentSafe(
 
 For S3 shipping, install the optional dependency: `pip install agent-safe[s3]`
 
+## Multi-Agent Delegation
+
+When an orchestrator agent needs to delegate sub-tasks to worker agents, use delegation tokens:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    signing_key="shared-secret-key",
+)
+
+# Create orchestrator identity
+parent_token = safe.identity.create_token(
+    agent_id="orchestrator-01",
+    roles=["deployer", "reader"],
+    groups=["infra-team"],
+)
+
+# Delegate to a worker with narrowed scope
+result = safe.delegate(
+    parent_token=parent_token,
+    child_agent_id="worker-01",
+    child_roles=["deployer"],  # Subset of parent's roles
+)
+
+if result.success:
+    # Worker uses the delegation token
+    decision = safe.check(
+        action="restart-deployment",
+        target="dev/test-app",
+        caller=result.token,
+        params={"namespace": "dev", "deployment": "app"},
+    )
+    # Audit log includes full delegation chain
+```
+
+From the CLI:
+
+```bash
+# Create a delegation token
+agent-safe delegation create "$PARENT_TOKEN" \
+    --child-id worker-01 \
+    --roles deployer \
+    --signing-key "shared-secret-key"
+
+# Verify a delegation token
+agent-safe delegation verify "$CHILD_TOKEN" --signing-key "shared-secret-key"
+```
+
 ## Policy Testing
 
 Validate your policies against expected outcomes with table-driven test cases:
@@ -284,10 +443,15 @@ agent-safe test ./tests/ --registry ./actions --policies ./policies
 | `agent-safe audit show <log>` | Show audit entries |
 | `agent-safe audit ship <log>` | Ship audit events to external backend |
 | `agent-safe ticket verify <token>` | Verify execution ticket |
+| `agent-safe credential resolve <token>` | Resolve credentials for a valid ticket |
+| `agent-safe credential test-vault` | Test vault connectivity |
+| `agent-safe approval list/show/approve/deny` | Manage approval requests |
+| `agent-safe delegation create <token>` | Create a delegation token |
+| `agent-safe delegation verify <token>` | Verify delegation token and chain |
 
 ## Next Steps
 
 - [Writing Actions](WRITING-ACTIONS.md) - define custom action definitions
 - [Writing Policies](WRITING-POLICIES.md) - write policy rules
 - [Architecture](ARCHITECTURE.md) - understand how it all fits together
-- [Credential Scoping](CREDENTIAL-SCOPING.md) - design for vault-based credential gating
+- [Credential Scoping](CREDENTIAL-SCOPING.md) - credential gating design

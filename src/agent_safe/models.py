@@ -163,6 +163,10 @@ class CallerSelector(BaseModel):
     agent_ids: list[str] | None = None
     roles: list[str] | None = None
     groups: list[str] | None = None
+    # Delegation policy fields (v0.3.0)
+    delegated_from: list[str] | None = None
+    max_delegation_depth: int | None = None
+    require_delegation: bool | None = None
 
 
 class TimeWindow(BaseModel):
@@ -185,6 +189,7 @@ class PolicyMatch(BaseModel):
     callers: CallerSelector | None = None
     time_windows: list[TimeWindow] | None = None
     risk_classes: list[RiskClass] | None = None
+    require_ticket: bool | None = None
 
 
 class PolicyRule(BaseModel):
@@ -205,6 +210,20 @@ class PolicyRule(BaseModel):
 # --- Agent Identity Schema ---
 
 
+class DelegationLink(BaseModel):
+    """A single hop in a delegation chain.
+
+    Recorded inside the JWT so the PDP can inspect the full provenance
+    of a delegated identity without any external state.
+    """
+
+    agent_id: str
+    agent_name: str = ""
+    roles: list[str] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
+    delegated_at: datetime
+
+
 class AgentIdentity(BaseModel):
     """Identity claims for an agent, extracted from a JWT."""
 
@@ -214,6 +233,10 @@ class AgentIdentity(BaseModel):
     groups: list[str] = Field(default_factory=list)
     issued_at: datetime | None = None
     expires_at: datetime | None = None
+    # Delegation fields (v0.3.0)
+    delegation_chain: list[DelegationLink] = Field(default_factory=list)
+    delegated_roles: list[str] = Field(default_factory=list)
+    delegation_depth: int = 0
 
 
 # --- Execution Ticket Schema ---
@@ -299,6 +322,33 @@ class ApprovalRequest(BaseModel):
     resolution_reason: str | None = None
 
 
+# --- Delegation Schema ---
+
+
+class DelegationRequest(BaseModel):
+    """Request to create a delegation token for a sub-agent."""
+
+    parent_token: str
+    child_agent_id: str
+    child_agent_name: str = ""
+    child_roles: list[str] = Field(default_factory=list)
+    child_groups: list[str] = Field(default_factory=list)
+    ttl_seconds: int | None = None
+    max_depth: int = 5
+
+
+class DelegationResult(BaseModel):
+    """Result of a delegation token creation attempt."""
+
+    success: bool
+    token: str | None = None
+    child_identity: AgentIdentity | None = None
+    error: str | None = None
+    parent_agent_id: str = ""
+    child_agent_id: str = ""
+    delegation_depth: int = 0
+
+
 # --- Decision (PDP Output) ---
 
 
@@ -316,6 +366,11 @@ class Decision(BaseModel):
     audit_id: str
     ticket: ExecutionTicket | None = None
     request_id: str | None = None
+    ticket_id: str | None = None
+    # Cumulative risk fields (v0.4.0)
+    cumulative_risk_score: int | None = None
+    cumulative_risk_class: RiskClass | None = None
+    escalated_from: DecisionResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -341,6 +396,7 @@ class AuditEvent(BaseModel):
     risk_class: RiskClass
     effective_risk: RiskClass
     correlation_id: str | None = None
+    ticket_id: str | None = None
     context: dict[str, Any] | None = None
 
 

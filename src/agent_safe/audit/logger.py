@@ -110,6 +110,7 @@ class AuditLogger:
             risk_class=decision.risk_class,
             effective_risk=decision.effective_risk,
             correlation_id=correlation_id,
+            ticket_id=decision.ticket_id,
             context=context,
         )
 

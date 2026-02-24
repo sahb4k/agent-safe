@@ -238,6 +238,118 @@ match:
   reason: Production changes allowed during weekend maintenance
 ```
 
+### Require a change ticket for production
+
+```yaml
+- name: allow-prod-with-ticket
+  priority: 500
+  match:
+    targets:
+      environments: [prod]
+    require_ticket: true
+  decision: allow
+  reason: Production changes allowed with change ticket
+
+- name: deny-prod-no-ticket
+  priority: 400
+  match:
+    targets:
+      environments: [prod]
+    require_ticket: false
+  decision: deny
+  reason: Production changes require a change ticket
+```
+
+### Allow untracked changes in dev
+
+```yaml
+- name: allow-dev-no-ticket
+  priority: 10
+  match:
+    targets:
+      environments: [dev]
+  decision: allow
+  reason: Dev does not require a ticket
+```
+
+`require_ticket` supports three states:
+- `true` — rule only matches when `ticket_id` is provided
+- `false` — rule only matches when no `ticket_id`
+- `null`/omitted (default) — matches regardless of ticket presence
+
+## Delegation Policies
+
+Control multi-agent delegation with CallerSelector fields:
+
+### Restrict delegation depth
+
+```yaml
+- name: deny-deep-delegation
+  description: Reject delegation chains deeper than 2
+  priority: 900
+  match:
+    callers:
+      max_delegation_depth: 2
+  decision: deny
+  reason: Delegation chain too deep (max 2 hops)
+```
+
+Note: `max_delegation_depth` matches when `depth <= value`. To deny depths > 2, use a deny rule with `max_delegation_depth: 2` at low priority, or use separate allow/deny rules.
+
+### Require delegation from specific orchestrator
+
+```yaml
+- name: allow-from-orchestrator
+  description: Allow actions delegated from trusted orchestrator
+  priority: 500
+  match:
+    callers:
+      delegated_from: [orchestrator-01, orchestrator-02]
+  decision: allow
+  reason: Delegated from trusted orchestrator
+```
+
+### Deny delegated callers for critical actions
+
+```yaml
+- name: deny-delegated-critical
+  description: Critical actions must come from direct callers
+  priority: 950
+  match:
+    risk_classes: [critical]
+    callers:
+      require_delegation: false
+  decision: deny
+  reason: Critical actions require direct (non-delegated) identity
+```
+
+Note: `require_delegation: true` matches only delegated callers, `false` matches only direct callers, and omitting it (or `null`) matches both.
+
+## Cumulative Risk Scoring
+
+Cumulative risk scoring operates as a **post-policy escalation layer** — it is not a policy match condition. Policies evaluate each action individually and return a decision. Then, if cumulative risk is configured, the risk tracker may escalate that decision based on accumulated risk within the caller's session window.
+
+This means:
+- You don't write cumulative risk rules in your policy files
+- Policy rules control individual action decisions
+- Cumulative risk adds session-level awareness on top
+- Escalation only goes UP: ALLOW → REQUIRE_APPROVAL, REQUIRE_APPROVAL → DENY
+
+Configure cumulative risk thresholds in the SDK:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    cumulative_risk={
+        "escalation_threshold": 30,   # ALLOW → REQUIRE_APPROVAL
+        "deny_threshold": 75,         # Any → DENY
+    },
+)
+```
+
+See [GETTING-STARTED.md](GETTING-STARTED.md#cumulative-risk-scoring) for full configuration.
+
 ## Validation
 
 ```bash

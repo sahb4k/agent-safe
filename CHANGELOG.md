@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-24
+
+Phase 2 -- Ticket/Incident Linkage.
+
+### Added
+
+- **Ticket/Incident Linkage**: Actions can reference an external change management ticket ID (JIRA, ServiceNow, PagerDuty, etc.) via `ticket_id` parameter. The ticket ID flows through the entire pipeline: SDK → PDP → policy matching → Decision → audit log. First-class audit field for compliance tracing.
+
+- **Policy-level ticket requirement**: New `require_ticket` field on policy match conditions. Three-state matching: `true` (action must have a ticket), `false` (action must NOT have a ticket), `null`/omitted (don't care). Different rules can have different ticket requirements.
+
+- **Decision.ticket_id**: Every Decision includes the ticket ID when provided, available via `to_dict()` and JSON output.
+
+- **AuditEvent.ticket_id**: First-class audit field (like `correlation_id`), queryable and filterable in audit exports.
+
+- **New CLI option**: `--ticket-id` on `check` command.
+
+- **Policy testing support**: Test cases can include `ticket_id` in YAML, passed through to policy evaluation.
+
+- **610 tests** (up from 577), covering ticket linkage models, PDP matching, SDK integration, CLI, and policy testing.
+
+## [0.4.0] - 2026-02-24
+
+Phase 2 -- Cumulative Risk Scoring.
+
+### Added
+
+- **Cumulative Risk Scoring**: Per-caller session-level risk tracking with sliding time window. Addresses Threat T7 (privilege escalation via action chaining). Configurable risk scores per risk class, escalation threshold (ALLOW → REQUIRE_APPROVAL), and deny threshold (any → DENY). Post-policy escalation layer -- policies evaluate individual actions, cumulative risk provides session awareness. Thread-safe, injectable clock for testing.
+
+- **Decision annotations**: Every non-DENY decision includes `cumulative_risk_score` and `cumulative_risk_class` fields when cumulative risk is configured. `escalated_from` field shows the original decision result when escalation occurs.
+
+- **Audit context enrichment**: Cumulative risk info (score, class, entry count, window) included in audit event context. Merged with delegation context when both are present.
+
+- **New SDK parameter**: `cumulative_risk` (dict or `CumulativeRiskConfig`) on `AgentSafe.__init__`.
+
+- **CLI enhancement**: `check` command output shows cumulative risk score and escalation info.
+
+- **577 tests** (up from 540), covering cumulative risk config, scoring, sliding window, escalation, PDP integration, SDK integration, and thread safety.
+
+## [0.3.0] - 2026-02-24
+
+Phase 2.1 -- Multi-Agent Delegation, Credential Gating, and Approval Workflows.
+
+### Added
+
+- **Multi-Agent Delegation**: Orchestrator agents can delegate sub-tasks to worker agents with full governance tracking. Delegation chains are carried in the JWT (stateless PDP preserved). Strict scope narrowing -- child roles must be a subset of parent's. TTL inheritance -- child token cannot outlive parent. Configurable max delegation depth (default 5).
+
+- **Delegation-Aware Policies**: New `CallerSelector` fields: `delegated_from` (match by chain origin), `max_delegation_depth` (limit chain depth), `require_delegation` (match only delegated or direct callers). Policies control who can delegate to whom.
+
+- **Delegation Audit Trail**: Full delegation chain (agent IDs, roles, timestamps) recorded in audit event `context` field. Original caller tracked for provenance.
+
+- **Credential Gating**: Agents never hold target credentials. Credentials are retrieved just-in-time via `resolve_credentials()` after ticket validation. `CredentialVault` protocol with `EnvVarVault` dev/test backend. Template engine (`{{ params.xyz }}`) resolves credential scopes from ticket parameters.
+
+- **Approval Workflows**: `REQUIRE_APPROVAL` decisions create trackable approval requests. `FileApprovalStore` with JSONL persistence. `ApprovalNotifier` protocol with webhook and Slack notifiers. SDK orchestration via `wait_for_approval()` and `resolve_approval()`.
+
+- **New models**: `DelegationLink`, `DelegationRequest`, `DelegationResult`, `CredentialScope`, `Credential`, `CredentialResult`, `ApprovalRequest`.
+
+- **New SDK methods**: `delegate()`, `verify_delegation()`, `resolve_credentials()`, `revoke_credential()`, `wait_for_approval()`, `resolve_approval()`.
+
+- **New CLI commands**:
+  - `agent-safe delegation create` -- create a delegation token for a sub-agent
+  - `agent-safe delegation verify` -- verify a delegation token and display the chain
+  - `agent-safe credential resolve` -- resolve credentials for a valid execution ticket
+  - `agent-safe credential test-vault` -- test vault connectivity
+  - `agent-safe approval list/show/approve/deny` -- manage approval requests
+
+- **540 tests** (up from 376), covering delegation, credentials, approvals, and all existing functionality.
+
 ## [0.2.0] - 2026-02-24
 
 Phase 1.5 -- bridges advisory enforcement to ticket-based authorization.
