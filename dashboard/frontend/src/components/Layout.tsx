@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { useAuth } from '../auth/AuthContext'
 
-const navItems = [
+const coreNavItems = [
   { to: '/', label: 'Dashboard' },
   { to: '/audit', label: 'Audit Log' },
   { to: '/actions', label: 'Actions' },
@@ -9,7 +10,25 @@ const navItems = [
   { to: '/activity', label: 'Activity' },
 ]
 
+const paidNavItems = [
+  { to: '/reports', label: 'Reports' },
+]
+
+const adminNavItems = [
+  { to: '/users', label: 'Users' },
+]
+
 export default function Layout({ children }: { children: ReactNode }) {
+  const { user, tier, logout } = useAuth()
+  const isPaid = tier !== 'free'
+  const isAdmin = user?.role === 'admin'
+
+  const navItems = [
+    ...coreNavItems,
+    ...(isPaid ? paidNavItems : []),
+    ...(isPaid && isAdmin ? adminNavItems : []),
+  ]
+
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
@@ -37,8 +56,23 @@ export default function Layout({ children }: { children: ReactNode }) {
             </li>
           ))}
         </ul>
-        <div className="px-4 py-3 border-t border-gray-700 text-xs text-gray-500">
-          v0.10.0
+        <div className="px-4 py-3 border-t border-gray-700">
+          {isPaid && user ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-300 font-medium">{user.username}</p>
+                <p className="text-xs text-gray-500">{user.role}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="text-xs text-gray-400 hover:text-white transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">v0.13.0</p>
+          )}
         </div>
       </nav>
 

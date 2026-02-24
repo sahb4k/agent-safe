@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchApi } from './client'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { fetchApi, postApi } from './client'
 
 // --- Types ---
 
@@ -177,5 +177,55 @@ export function useRecentDecisions(limit = 10) {
     queryKey: ['recent-decisions', limit],
     queryFn: () => fetchApi('/activity/recent-decisions', { limit: String(limit) }),
     refetchInterval: 5000,
+  })
+}
+
+// --- Compliance Reports ---
+
+export interface ReportSummary {
+  total_decisions: number
+  allowed: number
+  denied: number
+  approvals_required: number
+  unique_agents: number
+  unique_targets: number
+  high_risk_actions: number
+  denial_rate: number
+  audit_chain_valid: boolean
+}
+
+export interface ReportSection {
+  title: string
+  description: string
+  items: Record<string, unknown>[]
+}
+
+export interface ComplianceReport {
+  report_type: string
+  generated_at: string
+  period: { start: string; end: string }
+  summary: ReportSummary
+  sections: ReportSection[]
+}
+
+export function useGenerateReport() {
+  return useMutation<ComplianceReport, Error, { report_type: string; start_date: string; end_date: string }>({
+    mutationFn: (body) => postApi('/reports/generate', body),
+  })
+}
+
+// --- Users (admin) ---
+
+export interface UserInfo {
+  user_id: string
+  username: string
+  display_name: string
+  role: string
+}
+
+export function useUsers() {
+  return useQuery<UserInfo[]>({
+    queryKey: ['users'],
+    queryFn: () => fetchApi('/users/'),
   })
 }

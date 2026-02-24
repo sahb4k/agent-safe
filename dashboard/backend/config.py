@@ -23,6 +23,11 @@ class DashboardConfig:
     inventory_file: str = "./inventory.yaml"
     audit_log: str = "./audit.jsonl"
     dev_mode: bool = False
+    db_path: str = "./dashboard.db"
+    signing_key: str = ""
+    tier: str = "free"
+    admin_username: str = "admin"
+    admin_password: str = ""
 
     @classmethod
     def from_env(cls) -> DashboardConfig:

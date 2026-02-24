@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-02-25
+
+Commercial tier Phase A: Dashboard authentication and compliance reports.
+
+### Added
+
+- **Dashboard authentication**: JWT-based login with RBAC roles (admin/editor/viewer). PBKDF2-SHA256 password hashing (stdlib, zero new dependencies). Session tokens reuse existing PyJWT infrastructure with `type: "dashboard-session"` claim.
+
+- **SQLite user store**: Thread-safe database layer with WAL mode. Version-tracked schema migrations. User CRUD: create, list, update, deactivate, password reset.
+
+- **Tier gating**: `AGENT_SAFE_DASHBOARD_TIER` env var controls feature access. `free` (default) = no auth, existing behavior unchanged. `team` = auth + reports + user management. `enterprise` = team + SSO + clusters (future).
+
+- **Bootstrap admin**: Set `AGENT_SAFE_DASHBOARD_ADMIN_PASSWORD` to auto-create an admin user on first startup. No manual setup needed.
+
+- **Compliance report generation**: `POST /api/reports/generate` produces SOC2 and ISO 27001 evidence reports from audit data. SOC2 sections: Access Control (CC6.1), Change Management (CC8.1), Risk Assessment (CC3.2), Audit Trail Integrity (CC7.2), Incident Response (CC7.4). ISO 27001 sections: Security Events (A.12.4), Access Management (A.9.2), Change Control (A.12.1), Monitoring & Review (A.12.4).
+
+- **User management API**: Admin-only CRUD for dashboard users. `GET/POST /api/users`, `PUT/DELETE /api/users/{id}`, `POST /api/users/{id}/reset-password`.
+
+- **Frontend auth layer**: Login page, AuthContext with token persistence, ProtectedRoute wrapper, automatic Bearer token injection, 401 redirect to login.
+
+- **Frontend pages**: Reports page with SOC2/ISO 27001 generation form and tabular output. Users page with create/list for admin.
+
+- **Conditional navigation**: Sidebar shows Reports and Users only for paid tiers. User info and logout button in sidebar footer.
+
+- **72 new tests**: `test_dashboard_db.py` (11), `test_dashboard_auth.py` (35), `test_dashboard_reports.py` (15), `test_dashboard_tier.py` (11). Total: 1,174 tests.
+
+### Changed
+
+- **DashboardConfig**: 5 new fields — `db_path`, `signing_key`, `tier`, `admin_username`, `admin_password`. All configurable via `AGENT_SAFE_DASHBOARD_*` env vars.
+
+- **App factory**: Conditionally initializes SQLite, auth service, and paid-tier routers based on tier setting. Free tier is unmodified.
+
 ## [0.12.2] - 2026-02-25
 
 Documentation and PyPI metadata refresh.
