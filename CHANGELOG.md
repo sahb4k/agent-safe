@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2] - 2026-02-25
+
+Documentation and PyPI metadata refresh.
+
+### Changed
+
+- **PyPI metadata**: Added keywords (aws, rbac, zero-trust, guardrails). Updated README (PyPI long description) with correct version and test counts.
+- **Roadmap**: Phase 2.5 free tier marked complete. Split into free/paid tiers. Added zero-config and CI/CD milestones.
+- **Future Backlog**: Marked 10 completed items with version references.
+
 ## [0.12.1] - 2026-02-25
 
 CI pipeline and cross-platform test fixes.

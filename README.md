@@ -506,7 +506,7 @@ bash infra/teardown.sh                       # Cleanup
 
 ## Project Status
 
-**Alpha** (v0.12.1) -- zero-config setup (`agent-safe.yaml` auto-discovery), core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, GitHub Actions CI with trusted PyPI publishing, and integration test suite against real infrastructure. 1,102 unit tests + 27 integration tests.
+**Alpha** (v0.12.2) -- zero-config setup (`agent-safe.yaml` auto-discovery), core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, GitHub Actions CI with trusted PyPI publishing, and integration test suite against real infrastructure. 1,102 unit tests + 27 integration tests.
 
 What's next:
 - Team/org features (paid tier)
