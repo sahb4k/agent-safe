@@ -10,9 +10,11 @@ from agent_safe import AgentSafe, AgentSafeError
 from agent_safe.credentials.env_vault import EnvVarVault
 from agent_safe.models import DecisionResult
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 @pytest.fixture()

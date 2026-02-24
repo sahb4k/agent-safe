@@ -20,9 +20,11 @@ from agent_safe.testing.runner import (
     run_tests,
 )
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 def _safe() -> AgentSafe:
@@ -34,7 +36,7 @@ def _safe() -> AgentSafe:
 
 
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 # --- Test file loading ---
@@ -207,7 +209,7 @@ class TestRunTests:
     def test_all_pass(self):
         safe = _safe()
         cases = load_test_files(
-            Path("e:/Docs/Projects/agent-safe/tests/policy_tests")
+            _PROJECT_ROOT / "tests" / "policy_tests"
         )
         suite = run_tests(safe, cases)
         assert suite.all_passed

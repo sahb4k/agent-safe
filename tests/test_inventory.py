@@ -8,6 +8,8 @@ import yaml
 from agent_safe.inventory.loader import Inventory, InventoryError, load_inventory
 from agent_safe.models import Environment, Sensitivity, TargetDefinition
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 @pytest.fixture()
 def sample_targets() -> list[TargetDefinition]:
@@ -145,7 +147,7 @@ class TestLoadInventory:
 
     def test_load_real_inventory_file(self):
         """Load the actual project inventory.yaml to verify it's valid."""
-        inv = load_inventory(Path("e:/Docs/Projects/agent-safe/inventory.yaml"))
+        inv = load_inventory(_PROJECT_ROOT / "inventory.yaml")
         assert len(inv) == 12
         assert inv.get("prod/api-server") is not None
         assert inv.get("dev/debug-pod") is not None

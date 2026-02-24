@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import tempfile
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from click.testing import CliRunner
@@ -41,9 +42,11 @@ from agent_safe.sdk.client import AgentSafe, AgentSafeError
 
 # --- Test constants ---
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 NOW = datetime(2026, 2, 24, 12, 0, 0, tzinfo=UTC)
 

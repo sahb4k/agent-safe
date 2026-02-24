@@ -22,9 +22,11 @@ from agent_safe.models import (
 )
 from agent_safe.sdk.client import AgentSafe, AgentSafeError
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 SIGNING_KEY = "test-delegation-key"
 
 
@@ -544,7 +546,7 @@ class TestDelegationSDK:
 class TestDelegationCLI:
     def test_delegation_create(self):
         parent = _parent_token()
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "create", parent,
             "--child-id", "worker-01",
             "--roles", "deployer",
@@ -556,7 +558,7 @@ class TestDelegationCLI:
 
     def test_delegation_create_json_output(self):
         parent = _parent_token()
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "create", parent,
             "--child-id", "worker-01",
             "--roles", "deployer",
@@ -577,7 +579,7 @@ class TestDelegationCLI:
             child_agent_id="worker-01",
             child_roles=["deployer"],
         )
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "verify", child,
             "--signing-key", SIGNING_KEY,
         ])
@@ -587,7 +589,7 @@ class TestDelegationCLI:
         assert "orchestrator-01" in result.output
 
     def test_delegation_verify_invalid_token(self):
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "verify", "garbage",
             "--signing-key", SIGNING_KEY,
         ])
@@ -602,7 +604,7 @@ class TestDelegationCLI:
             child_agent_id="worker-01",
             child_roles=["deployer"],
         )
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "verify", child,
             "--signing-key", SIGNING_KEY,
             "--json-output",
@@ -614,7 +616,7 @@ class TestDelegationCLI:
 
     def test_delegation_verify_direct_token(self):
         parent = _parent_token()
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "delegation", "verify", parent,
             "--signing-key", SIGNING_KEY,
         ])

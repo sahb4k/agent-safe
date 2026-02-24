@@ -13,6 +13,8 @@ from agent_safe.registry.loader import (
     load_registry,
 )
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 # --- Fixtures ---
 
 
@@ -414,7 +416,7 @@ class TestLoadActionFile:
 class TestLoadRegistry:
     def test_load_real_actions_dir(self):
         """Load the actual project actions/ directory."""
-        registry = load_registry("e:/Docs/Projects/agent-safe/actions")
+        registry = load_registry(str(_PROJECT_ROOT / "actions"))
         assert len(registry) == 33  # 20 K8s + 13 AWS
         assert registry.get("restart-deployment") is not None
         assert registry.get("scale-deployment") is not None
@@ -427,7 +429,7 @@ class TestLoadRegistry:
 
     def test_load_real_actions_integrity(self):
         """Verify that all shipped action files produce valid hashes."""
-        registry = load_registry("e:/Docs/Projects/agent-safe/actions")
+        registry = load_registry(str(_PROJECT_ROOT / "actions"))
         hashes = registry.file_hashes
         assert len(hashes) == 33  # 20 K8s + 13 AWS
         for name, h in hashes.items():
@@ -483,7 +485,7 @@ class TestLoadRegistry:
 
     def test_validate_params_on_loaded_actions(self):
         """End-to-end: load real actions and validate params."""
-        registry = load_registry("e:/Docs/Projects/agent-safe/actions")
+        registry = load_registry(str(_PROJECT_ROOT / "actions"))
 
         # Valid restart
         errors = registry.validate_params(

@@ -37,9 +37,11 @@ from agent_safe.testing.runner import TestCase, load_test_file, run_tests
 
 # --- Test constants ---
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 NOW = datetime(2026, 2, 24, 12, 0, 0, tzinfo=UTC)
 

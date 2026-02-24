@@ -8,13 +8,15 @@ from click.testing import CliRunner
 from agent_safe import AgentSafe
 from agent_safe.cli.main import cli
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _create_pending_request(tmp_path: Path) -> tuple[AgentSafe, str]:
@@ -163,7 +165,7 @@ class TestApprovalShow:
             "--store", str(tmp_path / "approvals.jsonl"),
         ])
         assert result.exit_code == 1
-        assert "not found" in result.stderr.lower()
+        assert "not found" in result.output.lower()
 
     def test_show_missing_store(self, tmp_path: Path):
         result = runner().invoke(cli, [
@@ -254,4 +256,4 @@ class TestApprovalDeny:
             "--audit-log", str(tmp_path / "audit.jsonl"),
         ])
         assert result.exit_code == 1
-        assert "ERROR" in result.stderr
+        assert "ERROR" in result.output

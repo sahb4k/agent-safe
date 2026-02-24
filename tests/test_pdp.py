@@ -14,6 +14,7 @@ Table-driven tests covering:
 """
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -36,8 +37,10 @@ from agent_safe.registry.loader import load_registry
 
 # --- Fixtures ---
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
 
 
 @pytest.fixture()

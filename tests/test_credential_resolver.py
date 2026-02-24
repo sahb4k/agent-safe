@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,7 +18,9 @@ from agent_safe.credentials.resolver import (
 from agent_safe.models import CredentialScope, ExecutionTicket
 from agent_safe.registry.loader import load_registry
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
 
 
 def _make_ticket(**overrides) -> ExecutionTicket:

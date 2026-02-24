@@ -31,9 +31,11 @@ from agent_safe.audit.shipper import (
 )
 from agent_safe.models import AuditEvent, DecisionResult, RiskClass
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 @pytest.fixture()
@@ -449,7 +451,7 @@ class TestAuditShipCommand:
         self._generate_log(log_path, count=3)
 
         dest = tmp_path / "shipped.jsonl"
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "audit", "ship", str(log_path),
             "--backend", "filesystem",
             "--path", str(dest),
@@ -466,7 +468,7 @@ class TestAuditShipCommand:
 
         from agent_safe.cli.main import cli
 
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "audit", "ship", str(tmp_path / "missing.jsonl"),
             "--backend", "filesystem",
             "--path", str(tmp_path / "dest.jsonl"),
@@ -481,7 +483,7 @@ class TestAuditShipCommand:
         log_path = tmp_path / "audit.jsonl"
         log_path.write_text("", encoding="utf-8")
 
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "audit", "ship", str(log_path),
             "--backend", "filesystem",
             "--path", str(tmp_path / "dest.jsonl"),
@@ -497,7 +499,7 @@ class TestAuditShipCommand:
         log_path = tmp_path / "audit.jsonl"
         log_path.write_text("", encoding="utf-8")
 
-        result = CliRunner(mix_stderr=False).invoke(cli, [
+        result = CliRunner().invoke(cli, [
             "audit", "ship", str(log_path),
             "--backend", "webhook",
             # Missing --url

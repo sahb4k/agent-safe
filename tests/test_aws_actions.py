@@ -10,7 +10,9 @@ from pathlib import Path
 
 from agent_safe.registry.loader import load_registry
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
 
 AWS_ACTION_NAMES = [
     "ec2-stop-instance",

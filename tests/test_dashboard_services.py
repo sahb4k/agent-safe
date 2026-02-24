@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from pathlib import Path
 
 import pytest
 from dashboard.backend.config import DashboardConfig
@@ -12,9 +13,11 @@ from dashboard.backend.services.activity_service import ActivityService
 from dashboard.backend.services.audit_service import AuditService
 from dashboard.backend.services.policy_service import PolicyService
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 
 def _make_event(

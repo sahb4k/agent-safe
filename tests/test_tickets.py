@@ -31,9 +31,11 @@ from agent_safe.models import (
 from agent_safe.tickets.issuer import TicketIssuer, TicketIssuerError
 from agent_safe.tickets.validator import TicketValidator, TicketValidatorError
 
-ACTIONS_DIR = "e:/Docs/Projects/agent-safe/actions"
-POLICIES_DIR = "e:/Docs/Projects/agent-safe/policies"
-INVENTORY_FILE = "e:/Docs/Projects/agent-safe/inventory.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ACTIONS_DIR = str(_PROJECT_ROOT / "actions")
+POLICIES_DIR = str(_PROJECT_ROOT / "policies")
+INVENTORY_FILE = str(_PROJECT_ROOT / "inventory.yaml")
 
 SIGNING_KEY = "test-secret-key-for-ticket-tests"
 
@@ -515,7 +517,7 @@ class TestPDPTicketIntegration:
 
 
 def _runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 class TestCheckCommandTickets:
