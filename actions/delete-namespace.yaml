@@ -33,3 +33,11 @@ tags:
   - namespace
   - destructive
   - critical
+
+credentials:
+  type: kubernetes
+  fields:
+    verbs: ["delete"]
+    resources: ["namespaces"]
+    api_groups: [""]
+  ttl: 120

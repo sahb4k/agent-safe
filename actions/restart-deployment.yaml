@@ -32,3 +32,12 @@ tags:
   - kubernetes
   - deployment
   - restart
+
+credentials:
+  type: kubernetes
+  fields:
+    verbs: ["get", "patch"]
+    resources: ["deployments"]
+    namespaces: ["{{ params.namespace }}"]
+    api_groups: ["apps"]
+  ttl: 300

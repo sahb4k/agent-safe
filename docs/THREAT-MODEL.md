@@ -1,7 +1,7 @@
 # Agent-Safe — Threat Model
 
 ## Scope
-This threat model covers the agent-safe system as deployed in advisory mode (MVP) and notes how threats evolve when enforcement is added later.
+This threat model covers the agent-safe system as deployed in advisory mode (MVP) and ticket-based authorization (Phase 1.5), and notes how threats evolve when enforcement is added later.
 
 ## Trust Boundaries
 
@@ -39,7 +39,8 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **Impact**: Complete governance bypass. Audit log is incomplete (if agent skips the check) or shows a DENY followed by the action happening anyway.
 - **Likelihood**: HIGH in advisory mode (by design — this is the known limitation).
 - **MVP Control**: Audit log records the DENY. If paired with K8s audit logs, the discrepancy is detectable. Document this as a known limitation.
-- **Future Control (Phase 1.5+)**: Credential gating — agent never holds target credentials. Can't act without PDP approval. Execution tickets make bypass impossible.
+- **Phase 1.5 Control (Implemented)**: Execution tickets — PDP issues signed, time-limited, single-use JWT on ALLOW. Executors validate ticket before acting. Agent bypass is detectable (action without valid ticket).
+- **Future Control (Phase 2+)**: Credential gating — agent never holds target credentials. Runner retrieves creds from vault only after ticket validation. Can't act without PDP approval.
 
 ### T2: Prompt Injection → Policy Evasion
 - **Preconditions**: LLM-based agent receives adversarial input (from a ticket, email, log message, user input) that manipulates it into requesting a dangerous action framed as benign.
@@ -71,15 +72,17 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **Impact**: Compliance evidence is destroyed. Attacker covers their tracks.
 - **Likelihood**: MEDIUM (if attacker has host access, they likely have file access).
 - **MVP Control**: Hash-chained entries — any modification breaks the chain and is detectable via `agent-safe audit verify`. Log verification should be run periodically.
-- **Future Control (Phase 1.5)**: Real-time log shipping to external immutable storage (S3 Object Lock). Separate verification process that detects gaps/tampering independently.
+- **Phase 1.5 Control (Implemented)**: Real-time log shipping to external immutable storage via pluggable shippers (FilesystemShipper, WebhookShipper for SIEM, S3Shipper with Object Lock). CLI `agent-safe audit ship` for backfill/catch-up. Separate verification process detects gaps/tampering independently.
+- **Future Control**: Multi-site replication with cryptographic receipts. Independent verification service.
 
 ### T6: Denial of Service via Request Flooding
 - **Preconditions**: Compromised or misconfigured agent sends high volume of check requests.
 - **Attack**: Flood the PDP with requests, causing CPU/memory exhaustion on the sidecar, which may impact the agent process (since SDK runs in-process).
 - **Impact**: Agent process degrades. Legitimate checks are delayed or fail.
 - **Likelihood**: LOW-MEDIUM.
-- **MVP Control**: SDK-level rate limiting (configurable max requests per second). Fast-fail on obviously invalid requests (unknown action, malformed params) before full policy evaluation.
-- **Future Control**: Per-agent rate limits. Circuit breaker that auto-denies when rate exceeded. Alert on anomalous request volume.
+- **MVP Control**: Fast-fail on obviously invalid requests (unknown action, malformed params) before full policy evaluation.
+- **Phase 1.5 Control (Implemented)**: Per-caller sliding window rate limiting inside PDP (before policy eval). Circuit breaker auto-pauses agents exceeding configurable DENY thresholds with cooldown period. Thread-safe, injectable clock for testing.
+- **Future Control**: Alert on anomalous request volume. Dashboard visibility into rate-limited callers.
 
 ### T7: Privilege Escalation via Action Chaining
 - **Preconditions**: Individual actions are low-risk, but combining them achieves a high-risk outcome.
@@ -95,7 +98,8 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **Impact**: Action executes against unexpected state.
 - **Likelihood**: LOW in practice (time gap is usually milliseconds to seconds).
 - **MVP Control**: Accept this risk for MVP. Document it. Recommend agents check() and act() as close together as possible.
-- **Future Control**: Execution tickets with short TTL (30s–5min). Runner re-validates prechecks at execution time.
+- **Phase 1.5 Control (Implemented)**: Execution tickets with short TTL (default 5min, configurable). Single-use nonce prevents replay. Ticket encodes exact action + target + params — any deviation fails validation.
+- **Future Control (Phase 2+)**: Runner re-validates prechecks at execution time. Before/after state capture detects unexpected changes.
 
 ### T9: Data Exfiltration via Read Actions
 - **Preconditions**: Agent has legitimate access to read actions (get-configmap, get-pod-logs, get-secret).
@@ -129,21 +133,30 @@ This threat model covers the agent-safe system as deployed in advisory mode (MVP
 - **MVP Control**: Not applicable — no rollback in MVP.
 - **Future Control**: Rollback targets go through PDP. Policy checks whether the rollback target state meets current security requirements.
 
+### T13: Execution Ticket Forgery
+- **Preconditions**: Attacker knows or can guess the HMAC signing key, or can intercept a valid ticket.
+- **Attack**: Craft a fake execution ticket claiming PDP approved an action it didn't, or replay a previously used ticket.
+- **Impact**: Executor performs an unauthorized action believing it was PDP-approved.
+- **Likelihood**: LOW — requires signing key compromise or nonce tracking bypass.
+- **Phase 1.5 Control (Implemented)**: HMAC-SHA256 signing with `type: "execution-ticket"` claim (prevents cross-use with identity JWTs). Single-use nonce tracking (thread-safe set). Short TTL (default 5 min). Validator checks signature, expiry, issuer, nonce, and action/target match.
+- **Future Control**: Asymmetric signing (RSA/ECDSA) — signing key never leaves PDP. SPIFFE-based ticket binding to workload identity.
+
 ---
 
 ## Risk Summary
 
-| Threat | MVP Likelihood | MVP Impact | Post-Enforcement Likelihood | Priority |
-|--------|---------------|------------|---------------------------|----------|
-| T1: PDP Bypass | HIGH | HIGH | LOW (cred gating) | Accept for MVP |
+| Threat | Phase 1.5 Likelihood | Impact | Post-Enforcement Likelihood | Priority |
+|--------|---------------------|--------|---------------------------|----------|
+| T1: PDP Bypass | HIGH (advisory) | HIGH | LOW (cred gating) | Mitigate (tickets) |
 | T2: Prompt Injection | MEDIUM | HIGH | MEDIUM (Runner helps) | Monitor |
 | T3: Registry Poison | LOW-MED | HIGH | LOW-MED | Mitigate (integrity checks) |
 | T4: Policy Tamper | LOW-MED | HIGH | LOW-MED | Mitigate (git + review) |
-| T5: Audit Tamper | MEDIUM | HIGH | LOW (external shipping) | Mitigate (hash chain) |
-| T6: DoS Flooding | LOW-MED | MEDIUM | LOW (rate limits) | Mitigate (rate limits) |
+| T5: Audit Tamper | LOW (shipping) | HIGH | LOW | Mitigated (hash chain + shippers) |
+| T6: DoS Flooding | LOW (rate limits) | MEDIUM | LOW | Mitigated (rate limiter + circuit breaker) |
 | T7: Action Chaining | MEDIUM | HIGH | MEDIUM | Mitigate (risk classification) |
-| T8: TOCTOU | LOW | MEDIUM | LOW (tickets) | Accept for MVP |
+| T8: TOCTOU | LOW (tickets) | MEDIUM | LOW | Mitigated (ticket TTL + nonce) |
 | T9: Data Exfil | MEDIUM | HIGH | MEDIUM | Mitigate (policy on reads) |
-| T10: Supply Chain | N/A (MVP) | N/A | MEDIUM | Future |
+| T10: Supply Chain | N/A (no Runner) | N/A | MEDIUM | Future |
 | T11: Identity Spoof | LOW-MED | HIGH | LOW (SPIFFE) | Mitigate (JWT signing) |
-| T12: Rollback Vuln | N/A (MVP) | N/A | LOW | Future |
+| T12: Rollback Vuln | N/A (no Runner) | N/A | LOW | Future |
+| T13: Ticket Forgery | LOW | HIGH | LOW (asymmetric) | Mitigate (HMAC + nonce + TTL) |

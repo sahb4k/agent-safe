@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-24
+
+Phase 1.5 -- bridges advisory enforcement to ticket-based authorization.
+
+### Added
+
+- **Signed Execution Tickets**: ALLOW decisions include a signed, time-limited, single-use JWT token encoding the approved action, target, params, and expiry. Tokens use HMAC-SHA256 with a `type: "execution-ticket"` claim to prevent cross-use with identity JWTs. Configurable TTL (default 5 min), unique nonce per ticket.
+
+- **Ticket Validator**: Standalone library for executors to validate tickets without a full AgentSafe instance. Validates JWT signature, expiry, issuer, type claim, action/target match, and single-use nonce tracking. Thread-safe via lock.
+
+- **Rate Limiting + Circuit Breakers**: Per-caller sliding window rate limiting with configurable max requests and window duration. Circuit breaker auto-pauses agents that trigger too many DENY decisions within a window. Configurable threshold, window, and cooldown. Thread-safe, injectable clock for testing.
+
+- **External Audit Log Shipping**: Pluggable shipper system dispatches audit events to external backends after each local write. Built-in shippers: FilesystemShipper (JSON lines to file), WebhookShipper (POST to URL, stdlib only), S3Shipper (upload to S3, optional boto3). Custom shippers via `AuditShipper` protocol. Fire-and-forget -- shipping failures warn but never block logging.
+
+- **Policy Testing Framework**: `agent-safe test <path>` runs table-driven test cases against policy definitions. YAML test files specify action/target/caller/params and expected decision. Test suite reports pass/fail with reasons.
+
+- **New CLI commands**:
+  - `agent-safe test` -- run policy test cases
+  - `agent-safe audit ship` -- ship audit events to filesystem, webhook, or S3
+  - `agent-safe ticket verify` -- verify a signed execution ticket
+  - `--signing-key` option on `check` command for ticket issuance
+
+- **New SDK parameters**: `signing_key` (execution tickets), `rate_limit` (rate limiting config or dict), `audit_shippers` (shipper list or config dict).
+
+- **New public exports**: `ExecutionTicket`, `TicketValidationResult`, `TicketValidator`.
+
+- **Optional dependency**: `pip install agent-safe[s3]` installs boto3 for S3 audit shipping.
+
+- **Claude Agent SDK demo**: `examples/claude_agent_demo.py` showing 4 policy scenarios.
+
+- **376 tests** (up from 243), covering tickets, rate limiting, circuit breakers, shipping, and policy testing.
+
 ## [0.1.0] - 2026-02-24
 
 Initial alpha release.

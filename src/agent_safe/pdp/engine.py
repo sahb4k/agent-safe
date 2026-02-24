@@ -34,7 +34,9 @@ from agent_safe.models import (
     TargetDefinition,
     compute_effective_risk,
 )
+from agent_safe.ratelimit.limiter import RateLimiter
 from agent_safe.registry.loader import ActionRegistry
+from agent_safe.tickets.issuer import TicketIssuer
 
 
 class PDPError(Exception):
@@ -94,10 +96,14 @@ class PolicyDecisionPoint:
         rules: list[PolicyRule],
         registry: ActionRegistry,
         audit_logger: AuditLogger | None = None,
+        ticket_issuer: TicketIssuer | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._rules = sorted(rules, key=lambda r: r.priority, reverse=True)
         self._registry = registry
         self._audit = audit_logger
+        self._ticket_issuer = ticket_issuer
+        self._rate_limiter = rate_limiter
 
     @property
     def rules(self) -> list[PolicyRule]:
@@ -146,6 +152,28 @@ class PolicyDecisionPoint:
             param_errors = self._registry.validate_params(action, params)
 
         target_id = target.id if target else "unknown"
+
+        # Rate limit check (before policy evaluation)
+        if self._rate_limiter is not None:
+            deny_reason = self._rate_limiter.check_rate_limit(caller_id)
+            if deny_reason is not None:
+                decision = Decision(
+                    result=DecisionResult.DENY,
+                    reason=deny_reason,
+                    action=action,
+                    target=target_id,
+                    caller=caller_id,
+                    risk_class=action_risk,
+                    effective_risk=effective_risk,
+                    policy_matched=None,
+                    audit_id=audit_id,
+                )
+                if self._audit is not None:
+                    self._audit.log_decision(
+                        decision, params=params, timestamp=timestamp
+                    )
+                return decision
+
         decision: Decision | None = None
 
         # If action is unknown, deny immediately
@@ -209,11 +237,29 @@ class PolicyDecisionPoint:
                 audit_id=audit_id,
             )
 
+        # Record DENY for circuit breaker tracking
+        if self._rate_limiter is not None and decision.result == DecisionResult.DENY:
+            self._rate_limiter.record_deny(caller_id)
+
         # Auto-log to audit trail
         if self._audit is not None:
             self._audit.log_decision(
                 decision, params=params, timestamp=timestamp
             )
+
+        # Issue execution ticket for ALLOW decisions
+        if (
+            self._ticket_issuer is not None
+            and decision.result == DecisionResult.ALLOW
+        ):
+            ticket = self._ticket_issuer.issue(
+                action=decision.action,
+                target=decision.target,
+                caller=decision.caller,
+                audit_id=decision.audit_id,
+                params=params,
+            )
+            decision = decision.model_copy(update={"ticket": ticket})
 
         return decision
 

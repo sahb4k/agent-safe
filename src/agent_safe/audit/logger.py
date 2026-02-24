@@ -13,11 +13,15 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_safe.models import AuditEvent, Decision, DecisionResult, RiskClass
+
+if TYPE_CHECKING:
+    from agent_safe.audit.shipper import AuditShipper
 
 GENESIS_HASH = "0" * 64
 
@@ -26,16 +30,25 @@ class AuditError(Exception):
     """Raised when the audit log encounters an error."""
 
 
+class ShipperWarning(UserWarning):
+    """Emitted when an audit shipper fails (non-fatal)."""
+
+
 class AuditLogger:
     """Append-only, hash-chained JSON-lines audit logger.
 
     Thread-safe via a lock on write operations.
     """
 
-    def __init__(self, log_path: str | Path) -> None:
+    def __init__(
+        self,
+        log_path: str | Path,
+        shippers: list[AuditShipper] | None = None,
+    ) -> None:
         self._path = Path(log_path)
         self._lock = threading.Lock()
         self._prev_hash = self._read_last_hash()
+        self._shippers: list[AuditShipper] = shippers or []
 
     def _read_last_hash(self) -> str:
         """Read the hash of the last entry, or return genesis hash."""
@@ -157,6 +170,17 @@ class AuditLogger:
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(json_line + "\n")
             self._prev_hash = entry_hash
+
+        # Ship to external backends (fire-and-forget)
+        for shipper in self._shippers:
+            try:
+                shipper.ship(event)
+            except Exception as exc:
+                warnings.warn(
+                    f"Audit shipper {type(shipper).__name__} failed: {exc}",
+                    ShipperWarning,
+                    stacklevel=2,
+                )
 
         return event
 

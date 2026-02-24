@@ -15,7 +15,8 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 ### Credential Gating
 **What**: Agents never hold target credentials. Credentials live in a vault (HashiCorp Vault, AWS Secrets Manager). Only the Runner retrieves them after PDP approval.
 **Why cut**: Requires vault integration, changes agent deployment model, adds operational complexity.
-**When to reconsider**: Phase 1.5/2, when enforcement becomes the priority. Design the vault interface in Phase 1.5 even if you don't implement it.
+**Status**: Design document completed in Phase 1.5 ([CREDENTIAL-SCOPING.md](CREDENTIAL-SCOPING.md)). Implementation deferred to Phase 2.
+**When to reconsider**: Phase 2, when Runner is built and enforcement becomes the priority.
 
 ### Enforcement Proxy
 **What**: Network-level enforcement — all agent traffic to targets routes through a proxy that checks PDP decisions inline.
@@ -66,10 +67,9 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 **Why cut**: Frontend development is a separate skill set and time sink. CLI + log files are sufficient for MVP.
 **When to reconsider**: Phase 2.5. This is the monetization layer — free dashboard for OSS users, paid features for teams.
 
-### External Audit Log Shipping
+### ~~External Audit Log Shipping~~ — COMPLETED (Phase 1.5, v0.2.0)
 **What**: Push audit logs to immutable external storage (S3 Object Lock, GCS retention lock, WORM).
-**Why cut**: Adds cloud provider dependency. Local hash-chained logs are sufficient for MVP trust.
-**When to reconsider**: Phase 1.5. High-value, low-effort addition once the audit log format is stable.
+**Status**: Implemented. Pluggable `AuditShipper` protocol with three built-in backends: `FilesystemShipper`, `WebhookShipper` (stdlib), `S3Shipper` (optional boto3). Fire-and-forget after local write. CLI `agent-safe audit ship` for backfill.
 
 ### Compliance Report Generation
 **What**: Generate SOC2 / ISO 27001 evidence reports from audit logs. "Here's everything agents did, all decisions, all reasons."
@@ -78,8 +78,8 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ### SIEM/SOAR Integration
 **What**: Ship audit events to Splunk, Sentinel, XSOAR, etc.
-**Why cut**: Integration work, not core product.
-**When to reconsider**: Phase 2+, when enterprise customers demand it.
+**Status**: Partially addressed in Phase 1.5 — `WebhookShipper` can POST events to any HTTP endpoint (SIEM ingest URLs, webhook-based SOAR triggers). Native integrations (Splunk HEC, Sentinel connector) deferred.
+**When to reconsider**: Phase 2+, when enterprise customers demand native connectors beyond webhook.
 
 ---
 
@@ -141,9 +141,9 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 
 ## Developer Experience
 
-### `agent-safe init` Scaffolding
+### ~~`agent-safe init` Scaffolding~~ — COMPLETED (Phase 1, v0.1.0)
 **What**: `agent-safe init` generates a starter project with example actions, policies, inventory.
-**Why status**: Actually included in MVP Phase 1c. Keeping here as a reminder.
+**Status**: Implemented in MVP.
 
 ### Action Marketplace / Community Registry
 **What**: A shared repository of community-contributed action definitions (like Ansible Galaxy or Terraform Registry).

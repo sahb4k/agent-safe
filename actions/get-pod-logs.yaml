@@ -44,3 +44,12 @@ tags:
   - pod
   - logs
   - read-only
+
+credentials:
+  type: kubernetes
+  fields:
+    verbs: ["get"]
+    resources: ["pods/log"]
+    namespaces: ["{{ params.namespace }}"]
+    api_groups: [""]
+  ttl: 300

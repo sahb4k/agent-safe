@@ -147,12 +147,15 @@ def agent_step(action, target, params):
 | **Audit Log** | Hash-chained JSON lines. Every request + decision + reason. Append-only, tamper-evident. |
 | **Target Inventory** | What infrastructure exists, its environment (prod/staging/dev), sensitivity class |
 | **Agent Identity** | JWT-based caller identity -- agent_id, roles, groups. HMAC-SHA256 signed. |
+| **Execution Tickets** | Signed, time-limited, single-use tokens issued on ALLOW decisions. Bridges advisory to enforceable authorization. |
+| **Rate Limiting** | Per-caller request throttling with sliding window. Circuit breaker auto-pauses agents that trigger too many denials. |
+| **Audit Shipping** | Ship audit events to external immutable storage (S3, webhooks, filesystem) in real-time. |
 | **Context-Aware Risk** | Risk = f(action risk, target sensitivity). A medium action on a critical target = critical effective risk. |
 
 ## Key Design Decisions
 
 - **Default-deny**: If no policy matches, the answer is DENY. An unconfigured system blocks everything.
-- **Advisory enforcement**: Agent-Safe decides and logs. The agent executes (or doesn't). No credential gating in MVP.
+- **Advisory + tickets**: Agent-Safe decides and logs. ALLOW decisions include a signed execution ticket that executors can validate before acting.
 - **Stateless PDP**: No database. All context comes from the request + config files. Pure function: inputs -> output.
 - **Context-aware risk**: Risk is not a property of the action alone. `restart-deployment` is medium risk. `restart-deployment` on `prod/payments` (critical sensitivity) is critical risk.
 
@@ -208,6 +211,55 @@ token = safe.identity.create_token(
 decision = safe.check(action="restart-deployment", caller=token, ...)
 ```
 
+## Execution Tickets
+
+When `signing_key` is set, ALLOW decisions include a signed execution ticket -- a JWT that executors can validate before acting:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    signing_key="shared-secret-key",
+    audit_log="./audit.jsonl",
+)
+
+decision = safe.check(action="restart-deployment", target="dev/test-app",
+                       caller="agent-01", params={"namespace": "dev", "deployment": "app"})
+
+if decision.result == DecisionResult.ALLOW:
+    print(decision.ticket.token)      # Signed JWT
+    print(decision.ticket.nonce)      # Single-use nonce
+    print(decision.ticket.expires_at) # Short TTL (5 min default)
+```
+
+Validate tickets on the executor side:
+
+```python
+from agent_safe import TicketValidator
+
+validator = TicketValidator(signing_key="shared-secret-key")
+result = validator.validate(token, expected_action="restart-deployment")
+print(result.valid)   # True/False
+print(result.reason)  # Human-readable reason
+```
+
+## Rate Limiting
+
+Throttle per-agent request rates and auto-pause misbehaving agents:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    rate_limit={
+        "max_requests": 50,              # Per caller, per window
+        "window_seconds": 60,            # Sliding window
+        "circuit_breaker_threshold": 10,  # DENY count to trip breaker
+        "circuit_breaker_cooldown_seconds": 300,
+    },
+)
+```
+
 ## Audit Log
 
 Every `check()` call is logged to an append-only, hash-chained audit file:
@@ -219,8 +271,28 @@ agent-safe audit verify ./audit.jsonl
 # Show the last 10 entries
 agent-safe audit show ./audit.jsonl --last 10
 
-# JSON output for piping
-agent-safe audit show ./audit.jsonl --json-output
+# Ship audit log to external storage
+agent-safe audit ship ./audit.jsonl --backend filesystem --path ./backup.jsonl
+agent-safe audit ship ./audit.jsonl --backend s3 --bucket my-audit-bucket
+```
+
+Ship events to external backends in real-time via the SDK:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    audit_log="./audit.jsonl",
+    audit_shippers={"webhook_url": "https://siem.example.com/ingest"},
+)
+```
+
+## Policy Testing
+
+Validate your policies against expected outcomes:
+
+```bash
+agent-safe test ./tests/ --registry ./actions --policies ./policies
 ```
 
 ## CLI Reference
@@ -229,10 +301,13 @@ agent-safe audit show ./audit.jsonl --json-output
 |---------|-------------|
 | `agent-safe init [dir]` | Scaffold a new project with example config |
 | `agent-safe check <action>` | Evaluate a policy decision |
+| `agent-safe test <path>` | Run policy test cases |
 | `agent-safe list-actions` | Show registered actions (with --tag/--risk filters) |
 | `agent-safe validate` | Validate config files |
 | `agent-safe audit verify <log>` | Verify audit hash chain integrity |
 | `agent-safe audit show <log>` | Show audit entries |
+| `agent-safe audit ship <log>` | Ship audit events to external backend |
+| `agent-safe ticket verify <token>` | Verify a signed execution ticket |
 
 ## Docker (Sidecar)
 
@@ -254,16 +329,16 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.1.0) -- the core policy engine, SDK, CLI, audit log, and K8s action catalogue are complete and tested. Advisory enforcement only (decides + logs, does not execute).
+**Alpha** (v0.2.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue, execution tickets, rate limiting, audit log shipping, and policy testing framework are complete and tested. 376 tests passing.
 
-What's next (post-MVP):
-- Enforcement mode with signed execution tickets
-- Human approval workflows
-- OPA/Rego policy backend option
-- Multi-cloud action catalogues (AWS, Azure, GCP)
+What's next (Phase 2):
+- Human approval workflows (Slack, webhooks)
+- Cumulative risk scoring
+- K8s Runner / Executor
+- Before/after state capture and rollback
 - Web dashboard for audit trail
 
-See [docs/MVP-PLAN.md](docs/MVP-PLAN.md) for the full roadmap.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
 
 ## Contributing
 

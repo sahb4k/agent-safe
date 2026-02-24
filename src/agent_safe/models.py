@@ -7,6 +7,7 @@ Defines the schemas for:
 - Agent identity (who is the caller)
 - Audit events (what happened)
 - Decisions (PDP output)
+- Execution tickets (signed proof of approval)
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ class DecisionResult(enum.StrEnum):
     ALLOW = "allow"
     DENY = "deny"
     REQUIRE_APPROVAL = "require_approval"
+
+
+class ApprovalStatus(enum.StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
 
 
 class ParamType(enum.StrEnum):
@@ -86,6 +94,19 @@ class Precheck(BaseModel):
     description: str
 
 
+class CredentialScope(BaseModel):
+    """Defines the credential scope required by an action.
+
+    Loaded from the optional ``credentials`` block in action YAML.
+    The ``fields`` dict is type-specific (e.g., K8s verbs/resources,
+    AWS IAM actions/ARNs, SSH hosts/user).
+    """
+
+    type: str
+    fields: dict[str, Any] = Field(default_factory=dict)
+    ttl: int = Field(default=300, ge=1)
+
+
 class ActionDefinition(BaseModel):
     """A registered action that agents can request.
 
@@ -103,6 +124,7 @@ class ActionDefinition(BaseModel):
     rollback_action: str | None = None
     required_privileges: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    credentials: CredentialScope | None = None
 
 
 # --- Target Inventory Schema ---
@@ -194,6 +216,89 @@ class AgentIdentity(BaseModel):
     expires_at: datetime | None = None
 
 
+# --- Execution Ticket Schema ---
+
+
+class ExecutionTicket(BaseModel):
+    """A signed, time-limited, single-use execution ticket.
+
+    Issued by the PDP when a decision is ALLOW. Executors validate
+    the ticket before executing to enforce that the agent actually
+    went through the policy check.
+    """
+
+    token: str
+    action: str
+    target: str
+    caller: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    audit_id: str
+    nonce: str
+    issued_at: datetime
+    expires_at: datetime
+
+
+class TicketValidationResult(BaseModel):
+    """The result of validating an execution ticket."""
+
+    valid: bool
+    reason: str
+    ticket: ExecutionTicket | None = None
+
+
+# --- Credential Schema ---
+
+
+class Credential(BaseModel):
+    """A scoped, time-limited credential retrieved from a vault.
+
+    Returned by ``CredentialVault.get_credential()``. The payload is
+    type-specific (e.g., kubeconfig dict, access key pair, SSH key).
+    """
+
+    credential_id: str
+    type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    expires_at: datetime
+    scope: CredentialScope
+    ticket_nonce: str
+
+
+class CredentialResult(BaseModel):
+    """The result of a credential resolution attempt."""
+
+    success: bool
+    credential: Credential | None = None
+    error: str | None = None
+    action: str = ""
+    target: str = ""
+    ticket_nonce: str = ""
+
+
+# --- Approval Request ---
+
+
+class ApprovalRequest(BaseModel):
+    """A pending approval request created when PDP returns REQUIRE_APPROVAL."""
+
+    request_id: str
+    audit_id: str
+    action: str
+    target: str
+    caller: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    risk_class: RiskClass
+    effective_risk: RiskClass
+    policy_matched: str | None = None
+    reason: str
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    created_at: datetime
+    expires_at: datetime
+    resolved_at: datetime | None = None
+    resolved_by: str | None = None
+    resolution_reason: str | None = None
+
+
 # --- Decision (PDP Output) ---
 
 
@@ -209,6 +314,8 @@ class Decision(BaseModel):
     effective_risk: RiskClass
     policy_matched: str | None = None
     audit_id: str
+    ticket: ExecutionTicket | None = None
+    request_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

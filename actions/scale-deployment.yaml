@@ -40,3 +40,12 @@ tags:
   - kubernetes
   - deployment
   - scaling
+
+credentials:
+  type: kubernetes
+  fields:
+    verbs: ["get", "patch"]
+    resources: ["deployments", "deployments/scale"]
+    namespaces: ["{{ params.namespace }}"]
+    api_groups: ["apps"]
+  ttl: 300

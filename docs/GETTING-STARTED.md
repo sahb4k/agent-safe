@@ -157,6 +157,64 @@ decision = safe.check(
 )
 ```
 
+## Execution Tickets
+
+When `signing_key` is set, ALLOW decisions include a signed execution ticket that executors can validate:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    signing_key="shared-secret-key",
+)
+
+decision = safe.check(
+    action="restart-deployment", target="dev/test-app",
+    caller="agent-01", params={"namespace": "dev", "deployment": "app"},
+)
+
+# ALLOW decisions include a ticket
+if decision.ticket:
+    print(decision.ticket.token)       # Signed JWT
+    print(decision.ticket.expires_at)  # Short TTL (5 min default)
+```
+
+Validate tickets on the executor side:
+
+```python
+from agent_safe import TicketValidator
+
+validator = TicketValidator(signing_key="shared-secret-key")
+result = validator.validate(token, expected_action="restart-deployment")
+if result.valid:
+    execute_action(result.ticket.action, result.ticket.params)
+```
+
+Or from the CLI:
+
+```bash
+agent-safe ticket verify "$TOKEN" --signing-key "shared-secret-key"
+```
+
+## Rate Limiting
+
+Throttle per-agent request rates and auto-pause misbehaving agents:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    rate_limit={
+        "max_requests": 50,               # Per caller, per window
+        "window_seconds": 60,             # Sliding window
+        "circuit_breaker_threshold": 10,   # DENY count to trip breaker
+        "circuit_breaker_cooldown_seconds": 300,
+    },
+)
+```
+
+When a caller exceeds the rate limit, `check()` returns DENY with a reason like `"Rate limit exceeded for caller 'agent-01': 50 requests per 60s window."` The circuit breaker auto-pauses agents that trigger too many denials.
+
 ## Audit Log
 
 Every `check()` call is logged to an append-only, hash-chained audit file:
@@ -168,8 +226,49 @@ agent-safe audit verify ./audit.jsonl
 # Show the last 10 entries
 agent-safe audit show ./audit.jsonl --last 10
 
-# JSON output for piping to other tools
-agent-safe audit show ./audit.jsonl --json-output
+# Ship audit log to external storage
+agent-safe audit ship ./audit.jsonl --backend filesystem --path ./backup.jsonl
+agent-safe audit ship ./audit.jsonl --backend webhook --url https://siem.example.com/ingest
+agent-safe audit ship ./audit.jsonl --backend s3 --bucket my-audit-bucket
+```
+
+### Real-time Audit Shipping
+
+Ship events to external backends automatically as they're logged:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    audit_log="./audit.jsonl",
+    audit_shippers={"webhook_url": "https://siem.example.com/ingest"},
+)
+# Every check() now ships events to the webhook after local write
+```
+
+Multiple backends can be configured simultaneously:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    audit_log="./audit.jsonl",
+    audit_shippers={
+        "filesystem_path": "/mnt/nfs/audit-backup.jsonl",
+        "webhook_url": "https://siem.example.com/ingest",
+        "s3_bucket": "my-audit-bucket",
+    },
+)
+```
+
+For S3 shipping, install the optional dependency: `pip install agent-safe[s3]`
+
+## Policy Testing
+
+Validate your policies against expected outcomes with table-driven test cases:
+
+```bash
+agent-safe test ./tests/ --registry ./actions --policies ./policies
 ```
 
 ## CLI Reference
@@ -178,13 +277,17 @@ agent-safe audit show ./audit.jsonl --json-output
 |---------|-------------|
 | `agent-safe init [dir]` | Scaffold a new project |
 | `agent-safe check <action>` | Evaluate a policy decision |
+| `agent-safe test <path>` | Run policy test cases |
 | `agent-safe list-actions` | Show registered actions |
 | `agent-safe validate` | Validate config files |
 | `agent-safe audit verify <log>` | Verify audit chain |
 | `agent-safe audit show <log>` | Show audit entries |
+| `agent-safe audit ship <log>` | Ship audit events to external backend |
+| `agent-safe ticket verify <token>` | Verify execution ticket |
 
 ## Next Steps
 
 - [Writing Actions](WRITING-ACTIONS.md) - define custom action definitions
 - [Writing Policies](WRITING-POLICIES.md) - write policy rules
 - [Architecture](ARCHITECTURE.md) - understand how it all fits together
+- [Credential Scoping](CREDENTIAL-SCOPING.md) - design for vault-based credential gating

@@ -14,6 +14,10 @@
 | D8 | Agent identity | JWT (HMAC-SHA256) | mTLS, SPIFFE, API keys | JWT is simple, widely understood, and works for advisory model. HMAC-SHA256 is fine when the PDP and agent share an environment. Move to asymmetric/SPIFFE for cross-trust-boundary enforcement. |
 | D9 | Action definitions | YAML files in repo | Database, API, OCI artifacts | YAML in a git repo is versionable, diffable, reviewable (PRs), and requires no infrastructure. |
 | D10 | No Runner in MVP | Decided | Runner was in original plan | Runner is the most complex, most dangerous component. Building a secure general-purpose executor is multi-quarter. Advisory model eliminates the need for MVP. |
+| D11 | Execution ticket signing | HMAC-SHA256 (PyJWT) | RSA/ECDSA, PASETO | Symmetric signing is simple and correct when PDP and validator share an environment. `type: "execution-ticket"` claim prevents cross-use with identity JWTs. Move to asymmetric for cross-trust-boundary enforcement. |
+| D12 | Rate limit enforcement point | Inside PDP (before policy eval) | SDK wrapper, middleware | Placing rate limiting inside PDP ensures all paths are protected, including `check_plan()`. Record denials after policy eval (not rate-limited denials) for circuit breaker. |
+| D13 | Audit log shipping model | Synchronous fire-and-forget | Background thread, async | Local file is source of truth. Shippers run synchronously after local write, exceptions caught and warned. Simplest correct approach. CLI replay command handles catch-up. |
+| D14 | Shipper interface | `typing.Protocol` | ABC, callable | Protocol is the modern Python approach. `runtime_checkable` enables `isinstance()` checks. Any object with `ship(event)` satisfies the protocol -- no inheritance required. |
 
 ---
 
@@ -147,21 +151,46 @@ No component does more than one job.
 
 ---
 
-## Future Architecture (Post-MVP)
+## Phase 1.5 Architecture (Current)
 
-When enforcement is added (Phase 1.5+), the architecture extends:
+Phase 1.5 extends the MVP with ticket-based authorization, rate limiting, and external audit shipping:
+
+```
+Agent → SDK → Rate Limiter → PDP → ALLOW + signed Execution Ticket
+                               │         │
+                               │         ▼
+                               │  Executor validates ticket
+                               │  (TicketValidator: sig, expiry, nonce)
+                               │
+                               ▼
+                         Audit Logger → Local file (source of truth)
+                               │
+                               ├──→ FilesystemShipper (backup file)
+                               ├──→ WebhookShipper (SIEM/log aggregator)
+                               └──→ S3Shipper (immutable storage)
+```
+
+**What's new vs MVP:**
+- **Rate Limiter** sits before policy evaluation — per-caller sliding window + circuit breaker
+- **Execution Tickets** are issued on ALLOW — signed JWT with action, target, nonce, expiry
+- **Ticket Validator** is a standalone library — executors validate without full AgentSafe
+- **Audit Shippers** fire after each local write — pluggable via `AuditShipper` protocol
+
+The PDP design does not change. These features are additive.
+
+## Future Architecture (Phase 2+)
+
+When enforcement is added:
 
 ```
 Agent → SDK → PDP → ALLOW + signed Execution Ticket
                        │
                        ▼
-              Executor validates ticket
-              Executor retrieves creds from vault (JIT)
-              Executor runs action on target
-              Executor reports result to audit log
+              Runner validates ticket
+              Runner retrieves creds from vault (JIT)
+              Runner runs action on target
+              Runner reports result to audit log
 ```
-
-The PDP design does not change. The Execution Ticket and Executor are additive. This is why the MVP architecture is correct — it doesn't need to be rewritten when enforcement is added.
 
 ---
 

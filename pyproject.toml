@@ -44,6 +44,9 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
 ]
+s3 = [
+    "boto3>=1.28",
+]
 
 [project.scripts]
 agent-safe = "agent_safe.cli.main:cli"

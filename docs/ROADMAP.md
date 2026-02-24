@@ -5,9 +5,9 @@ Agent-Safe becomes the standard governance layer for AI agents operating on infr
 
 ## Roadmap Sequence
 ```
-Phase 1 (MVP)     → Policy Sidecar        (6-8 weeks)   ← WE ARE HERE
-Phase 1.5         → Execution Tickets      (4-6 weeks)
-Phase 2           → Change Control         (8-12 weeks)
+Phase 1 (MVP)     → Policy Sidecar        (6-8 weeks)   ✅ COMPLETE
+Phase 1.5         → Execution Tickets      (4-6 weeks)   ✅ COMPLETE
+Phase 2           → Change Control         (8-12 weeks)  ← WE ARE HERE
 Phase 2.5         → Dashboard + SaaS tier  (6-8 weeks)
 Phase 3           → Agent Supervisor       (separate product decision)
 ```
@@ -15,7 +15,7 @@ Phase 3           → Agent Supervisor       (separate product decision)
 ---
 
 ## Phase 1: Policy Sidecar (MVP) — Weeks 1–8
-**Status**: In progress
+**Status**: Complete (v0.1.0)
 **Detailed plan**: [MVP-PLAN.md](MVP-PLAN.md)
 
 **Deliverables**:
@@ -32,18 +32,18 @@ Phase 3           → Agent Supervisor       (separate product decision)
 ---
 
 ## Phase 1.5: Execution Tickets — Weeks 9–14
-**Depends on**: Phase 1 complete, at least one real-world deployment/design partner
+**Status**: Complete (v0.2.0)
 
 **Goal**: Bridge from advisory to enforceable decisions without building a full Runner.
 
 **Deliverables**:
-- **Signed Execution Tickets**: PDP issues a signed, time-limited, single-use token when it returns ALLOW. The token encodes the approved action, target, params, and expiry.
-- **Ticket Validator**: A lightweight library/sidecar that existing executors (Ansible, Terraform, K8s controllers) can use to validate a ticket before executing.
-- **Credential Scoping Design**: Document the architecture for credential gating (vault integration, just-in-time credential retrieval). Don't build it yet — design and validate the approach with a design partner.
-- **External Audit Log Shipping**: Push audit logs to immutable external storage (S3 Object Lock, GCS retention-locked bucket).
-- **Rate Limiting + Circuit Breakers**: Per-agent request rate limits. Auto-pause agents that exceed thresholds.
-- **Policy Testing Framework**: `agent-safe test policies/` — run a test suite against policy definitions (table-driven: input → expected decision).
-- **Second target environment actions** (based on design partner needs — likely AWS EC2/Lambda or generic Linux/SSH).
+- [x] **Signed Execution Tickets**: PDP issues a signed, time-limited, single-use JWT on ALLOW. Encodes action, target, params, nonce, expiry. HMAC-SHA256 with `type: "execution-ticket"` claim.
+- [x] **Ticket Validator**: Standalone validator with signature, expiry, issuer, action/target match, and single-use nonce checks. Thread-safe.
+- [x] **Policy Testing Framework**: `agent-safe test <path>` runs table-driven YAML test suites against policy definitions.
+- [x] **Rate Limiting + Circuit Breakers**: Per-caller sliding window rate limiting. Circuit breaker auto-pauses agents exceeding DENY thresholds. Thread-safe, injectable clock.
+- [x] **External Audit Log Shipping**: Pluggable shipper protocol with FilesystemShipper, WebhookShipper (stdlib), S3Shipper (optional boto3). Fire-and-forget after local write.
+- [x] **Credential Scoping Design**: Architecture document for vault-based credential gating ([CREDENTIAL-SCOPING.md](CREDENTIAL-SCOPING.md)).
+- [ ] **Second target environment actions**: Deferred — awaiting design partner feedback on AWS vs Linux/SSH.
 
 **Enforcement model**: Ticket-based — agent receives a signed ticket, must present it to the executor. Executor validates before acting. Agent still holds some credentials, but the ticket provides an audit-verified authorization chain.
 

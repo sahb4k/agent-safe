@@ -98,7 +98,7 @@ def run_standalone_demo() -> None:
     # Simulate what a Claude agent would do: plan and check actions
     scenarios = [
         {
-            "description": "Scenario 1: Staging reads allowed, writes need deployer role",
+            "description": "Scenario 1: Staging reads allowed, writes denied (default deny)",
             "steps": [
                 {
                     "action": "get-pod-logs",
@@ -143,7 +143,7 @@ def run_standalone_demo() -> None:
             ],
         },
         {
-            "description": "Scenario 4: Dangerous operation (should be BLOCKED)",
+            "description": "Scenario 4: Dangerous operation (critical risk, requires approval)",
             "steps": [
                 {
                     "action": "delete-namespace",
