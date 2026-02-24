@@ -13,12 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import uuid
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_safe.models import AuditEvent, Decision, DecisionResult, RiskClass
+from agent_safe.models import AuditEvent, Decision, DecisionResult, RiskClass, StateCapture
 
 if TYPE_CHECKING:
     from agent_safe.audit.shipper import AuditShipper
@@ -184,6 +185,62 @@ class AuditLogger:
                 )
 
         return event
+
+    def log_state_capture(
+        self,
+        state_capture: StateCapture,
+        timestamp: datetime | None = None,
+    ) -> AuditEvent:
+        """Log a state capture event linked to an original decision.
+
+        Uses the existing hash chain and shipping infrastructure.
+        The state data is stored in the ``context`` field.
+
+        Args:
+            state_capture: The StateCapture with before/after/diff data.
+            timestamp: Override event timestamp (defaults to now).
+
+        Returns:
+            The created AuditEvent.
+        """
+        timestamp = timestamp or datetime.now(tz=UTC)
+
+        event = AuditEvent(
+            event_id=f"evt-{uuid.uuid4().hex[:12]}",
+            timestamp=timestamp,
+            prev_hash=self._prev_hash,
+            event_type="state_capture",
+            action=state_capture.action,
+            target=state_capture.target,
+            caller=state_capture.caller,
+            decision=DecisionResult.ALLOW,
+            reason=f"State capture for {state_capture.audit_id}",
+            risk_class=RiskClass.LOW,
+            effective_risk=RiskClass.LOW,
+            correlation_id=state_capture.audit_id,
+            context={
+                "type": "state_capture",
+                "original_audit_id": state_capture.audit_id,
+                "before_state": state_capture.before_state,
+                "after_state": state_capture.after_state,
+                "diff": state_capture.diff,
+                "capture_duration_ms": state_capture.capture_duration_ms,
+                "state_fields_declared": state_capture.state_fields_declared,
+                "state_fields_captured": state_capture.state_fields_captured,
+            },
+        )
+
+        return self._write_event(event)
+
+    def get_state_captures(self, audit_id: str) -> list[AuditEvent]:
+        """Return state capture events linked to a decision audit_id."""
+        events = self.read_events()
+        return [
+            e for e in events
+            if e.event_type == "state_capture"
+            and e.context is not None
+            and e.context.get("original_audit_id") == audit_id
+        ]
 
     def read_events(self) -> list[AuditEvent]:
         """Read all events from the log file."""

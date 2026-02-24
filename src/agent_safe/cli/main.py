@@ -539,7 +539,12 @@ def audit_verify(log_file: str) -> None:
 @click.argument("log_file", default=DEFAULT_AUDIT_LOG)
 @click.option("--last", "count", default=20, help="Number of entries to show")
 @click.option("--json-output", is_flag=True, help="Output as JSON")
-def audit_show(log_file: str, count: int, json_output: bool) -> None:
+@click.option(
+    "--event-type", default=None,
+    type=click.Choice(["decision", "state_capture"]),
+    help="Filter by event type",
+)
+def audit_show(log_file: str, count: int, json_output: bool, event_type: str | None) -> None:
     """Show recent audit log entries."""
     path = Path(log_file)
     if not path.exists():
@@ -548,6 +553,10 @@ def audit_show(log_file: str, count: int, json_output: bool) -> None:
 
     logger = AuditLogger(path)
     events = logger.read_events()
+
+    # Filter by event type if specified
+    if event_type is not None:
+        events = [e for e in events if e.event_type == event_type]
 
     # Take last N
     events = events[-count:]
@@ -560,19 +569,28 @@ def audit_show(log_file: str, count: int, json_output: bool) -> None:
             click.echo("No audit entries found.")
             return
         for event in events:
-            color = {
-                DecisionResult.ALLOW: "green",
-                DecisionResult.DENY: "red",
-                DecisionResult.REQUIRE_APPROVAL: "yellow",
-            }.get(event.decision, "white")
-            click.echo(
-                f"  {event.timestamp.isoformat()[:19]}  "
-                + click.style(
-                    f"{event.decision.value.upper():<17}", fg=color
+            if event.event_type == "state_capture":
+                ctx = event.context or {}
+                click.echo(
+                    f"  {event.timestamp.isoformat()[:19]}  "
+                    + click.style("STATE_CAPTURE    ", fg="cyan")
+                    + f" {event.action:<25} "
+                    + f"target={event.target}  audit_id={ctx.get('original_audit_id', '?')}"
                 )
-                + f" {event.action:<25} "
-                + f"target={event.target}  caller={event.caller}"
-            )
+            else:
+                color = {
+                    DecisionResult.ALLOW: "green",
+                    DecisionResult.DENY: "red",
+                    DecisionResult.REQUIRE_APPROVAL: "yellow",
+                }.get(event.decision, "white")
+                click.echo(
+                    f"  {event.timestamp.isoformat()[:19]}  "
+                    + click.style(
+                        f"{event.decision.value.upper():<17}", fg=color
+                    )
+                    + f" {event.action:<25} "
+                    + f"target={event.target}  caller={event.caller}"
+                )
         click.echo(f"\n{len(events)} event(s) shown.")
 
 
@@ -656,6 +674,103 @@ def audit_ship(
     )
     if errors:
         sys.exit(1)
+
+
+@audit.command("show-state")
+@click.argument("audit_id")
+@click.option("--log-file", default=DEFAULT_AUDIT_LOG, help="Audit log file")
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def audit_show_state(audit_id: str, log_file: str, json_output: bool) -> None:
+    """Show state capture for a specific decision audit_id."""
+    path = Path(log_file)
+    if not path.exists():
+        click.echo(f"Audit log not found: {path}")
+        sys.exit(1)
+
+    logger = AuditLogger(path)
+    events = logger.get_state_captures(audit_id)
+
+    if not events:
+        click.echo(f"No state capture found for audit_id: {audit_id}")
+        sys.exit(1)
+
+    event = events[-1]
+    ctx = event.context or {}
+
+    if json_output:
+        click.echo(json.dumps({
+            "audit_id": ctx.get("original_audit_id"),
+            "action": event.action,
+            "target": event.target,
+            "caller": event.caller,
+            "before_state": ctx.get("before_state", {}),
+            "after_state": ctx.get("after_state", {}),
+            "diff": ctx.get("diff", {}),
+            "capture_duration_ms": ctx.get("capture_duration_ms"),
+            "state_fields_declared": ctx.get("state_fields_declared", []),
+            "state_fields_captured": ctx.get("state_fields_captured", []),
+            "timestamp": event.timestamp.isoformat(),
+        }, indent=2))
+    else:
+        click.echo(f"State Capture for {audit_id}")
+        click.echo(f"  action:   {event.action}")
+        click.echo(f"  target:   {event.target}")
+        click.echo(f"  caller:   {event.caller}")
+        click.echo(f"  captured: {event.timestamp.isoformat()[:19]}")
+        duration = ctx.get("capture_duration_ms")
+        if duration is not None:
+            click.echo(f"  duration: {duration:.1f}ms")
+        click.echo(f"\n  Before state: {json.dumps(ctx.get('before_state', {}), indent=4)}")
+        click.echo(f"\n  After state:  {json.dumps(ctx.get('after_state', {}), indent=4)}")
+        diff = ctx.get("diff", {})
+        if diff.get("changed"):
+            click.echo("\n  Changes:")
+            for key, val in diff["changed"].items():
+                click.echo(f"    {key}: {val['old']} -> {val['new']}")
+        if diff.get("added"):
+            click.echo(f"\n  Added: {json.dumps(diff['added'])}")
+        if diff.get("removed"):
+            click.echo(f"\n  Removed: {json.dumps(diff['removed'])}")
+
+
+@audit.command("state-coverage")
+@click.argument("log_file", default=DEFAULT_AUDIT_LOG)
+@click.option("--json-output", is_flag=True, help="Output as JSON")
+def audit_state_coverage(log_file: str, json_output: bool) -> None:
+    """Show which decisions have state capture data."""
+    path = Path(log_file)
+    if not path.exists():
+        click.echo(f"Audit log not found: {path}")
+        sys.exit(1)
+
+    logger = AuditLogger(path)
+    events = logger.read_events()
+
+    decisions = [e for e in events if e.event_type == "decision"]
+    captures = [e for e in events if e.event_type == "state_capture"]
+
+    captured_ids = {
+        (e.context or {}).get("original_audit_id")
+        for e in captures
+        if e.context
+    }
+
+    total = len(decisions)
+    covered = sum(1 for d in decisions if d.event_id in captured_ids)
+    pct = (covered / total * 100) if total > 0 else 0.0
+
+    if json_output:
+        click.echo(json.dumps({
+            "total_decisions": total,
+            "with_state_capture": covered,
+            "without_state_capture": total - covered,
+            "coverage_percent": round(pct, 1),
+        }, indent=2))
+    else:
+        click.echo(f"State capture coverage: {covered}/{total} ({pct:.1f}%)")
+        click.echo(f"  Decisions:           {total}")
+        click.echo(f"  With state capture:  {covered}")
+        click.echo(f"  Without:             {total - covered}")
 
 
 # --- ticket group ---

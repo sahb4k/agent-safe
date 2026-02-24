@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-24
+
+Phase 2 -- Before/After State Capture.
+
+### Added
+
+- **Before/After State Capture**: Executors can record target state before and after action execution. State data (before, after, diff) is stored in the audit log as `state_capture` events, linked to the original decision via `audit_id`. Enables compliance auditing of "what changed?" for every governed action.
+
+- **StateCapture model**: Structured Pydantic model for state data with `before_state`, `after_state`, `diff`, `capture_duration_ms`, `state_fields_declared`, and `state_fields_captured` fields.
+
+- **StateFieldSpec model**: Advisory state field declarations in action YAML. Tells executors what fields to capture per action type. Non-enforced — executors can capture any fields.
+
+- **AuditEvent.event_type**: New field distinguishing `decision` events from `state_capture` events. Default `"decision"` for backward compatibility.
+
+- **SDK state capture API**: `record_before_state()`, `record_after_state()`, `record_state()` (convenience), and `get_state_capture()` methods on `AgentSafe`.
+
+- **Diff utility**: `compute_state_diff()` computes shallow dict diffs with added/removed/changed/unchanged categorization.
+
+- **New CLI commands**: `audit show-state <audit_id>` displays state capture for a decision. `audit state-coverage` reports what percentage of decisions have state captures. `audit show --event-type` filters by event type.
+
+- **Action YAML extensions**: `state_fields` block added to `scale-deployment`, `restart-deployment`, and `update-configmap` actions.
+
+- **689 tests** (up from 610), covering state capture models, diff utility, audit logger, SDK, CLI, and end-to-end flows.
+
 ## [0.5.0] - 2026-02-24
 
 Phase 2 -- Ticket/Incident Linkage.

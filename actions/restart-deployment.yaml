@@ -41,3 +41,14 @@ credentials:
     namespaces: ["{{ params.namespace }}"]
     api_groups: ["apps"]
   ttl: 300
+
+state_fields:
+  - name: generation
+    description: Deployment metadata.generation
+    type: integer
+  - name: observed_generation
+    description: Deployment status.observedGeneration
+    type: integer
+  - name: available_replicas
+    description: Number of available replicas
+    type: integer

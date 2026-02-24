@@ -40,3 +40,9 @@ required_privileges:
 tags:
   - kubernetes
   - config
+
+state_fields:
+  - name: data
+    description: Full ConfigMap data contents
+    type: object
+    required: true

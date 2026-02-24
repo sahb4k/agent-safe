@@ -93,6 +93,33 @@ tags:
 | `rollback_action` | string | `null` | Action to call for rollback |
 | `required_privileges` | list | `[]` | K8s RBAC privileges needed |
 | `tags` | list | `[]` | Searchable tags |
+| `state_fields` | list | `[]` | Expected fields for before/after state capture |
+
+## State Capture Fields
+
+Actions can optionally declare what state fields executors should capture before and after execution. These declarations are advisory — they document what's expected but don't enforce it.
+
+```yaml
+state_fields:
+  - name: replicas
+    description: Current replica count
+    type: integer
+    required: true
+  - name: available_replicas
+    description: Number of available replicas
+    type: integer
+  - name: ready_replicas
+    description: Number of ready replicas
+    type: integer
+```
+
+Each state field has:
+- `name` (required): Field name
+- `description`: What the field represents
+- `type`: Type hint (`string`, `integer`, `object`, `array`, `any`)
+- `required`: Whether executors should always capture this field (default `false`)
+
+State fields are used by the SDK's `record_after_state()` to report which declared fields were actually captured, enabling coverage analysis via `audit state-coverage`.
 
 ## Parameter Types
 

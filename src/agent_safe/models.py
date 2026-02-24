@@ -94,6 +94,19 @@ class Precheck(BaseModel):
     description: str
 
 
+class StateFieldSpec(BaseModel):
+    """A single state field expected for before/after state capture.
+
+    Defined in the optional ``state_fields`` block of action YAML.
+    Advisory only — tells executors what to capture.
+    """
+
+    name: str
+    description: str = ""
+    type: str = "any"
+    required: bool = False
+
+
 class CredentialScope(BaseModel):
     """Defines the credential scope required by an action.
 
@@ -125,6 +138,7 @@ class ActionDefinition(BaseModel):
     required_privileges: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     credentials: CredentialScope | None = None
+    state_fields: list[StateFieldSpec] = Field(default_factory=list)
 
 
 # --- Target Inventory Schema ---
@@ -386,6 +400,7 @@ class AuditEvent(BaseModel):
     timestamp: datetime
     prev_hash: str
     entry_hash: str = ""
+    event_type: str = "decision"
     action: str
     target: str
     caller: str
@@ -398,6 +413,29 @@ class AuditEvent(BaseModel):
     correlation_id: str | None = None
     ticket_id: str | None = None
     context: dict[str, Any] | None = None
+
+
+# --- State Capture Schema ---
+
+
+class StateCapture(BaseModel):
+    """Before/after state capture for an executed action.
+
+    Linked to the original decision via ``audit_id``.
+    Stored as a state_capture event in the audit log.
+    """
+
+    audit_id: str
+    action: str
+    target: str
+    caller: str
+    before_state: dict[str, Any] = Field(default_factory=dict)
+    after_state: dict[str, Any] = Field(default_factory=dict)
+    diff: dict[str, Any] = Field(default_factory=dict)
+    captured_at: datetime
+    capture_duration_ms: float | None = None
+    state_fields_declared: list[str] = Field(default_factory=list)
+    state_fields_captured: list[str] = Field(default_factory=list)
 
 
 # --- Risk Matrix ---

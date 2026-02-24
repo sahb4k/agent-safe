@@ -325,6 +325,72 @@ decisions = safe.check_plan([
 
 The ticket ID is opaque to Agent-Safe — it can be a JIRA key, ServiceNow incident number, URL, or any string. Validation of the ticket's existence is the caller's responsibility.
 
+## Before/After State Capture
+
+Record target state before and after action execution for audit and compliance:
+
+```python
+safe = AgentSafe(
+    registry="./actions",
+    policies="./policies",
+    inventory="./inventory.yaml",
+    audit_log="./audit.jsonl",
+)
+
+# 1. Get a decision
+decision = safe.check(
+    action="scale-deployment",
+    target="dev/test-app",
+    caller="agent-01",
+    params={"namespace": "dev", "deployment": "app", "replicas": 5},
+)
+
+if decision.result == DecisionResult.ALLOW:
+    # 2. Capture state before execution
+    safe.record_before_state(decision.audit_id, {
+        "replicas": 2,
+        "available_replicas": 2,
+    })
+
+    # 3. Execute the action
+    # kubectl scale deployment app --replicas=5 -n dev
+
+    # 4. Capture state after execution
+    capture = safe.record_after_state(
+        decision.audit_id,
+        {"replicas": 5, "available_replicas": 3},
+        action="scale-deployment",
+        target="dev/test-app",
+        caller="agent-01",
+    )
+
+    print(capture.diff)  # {"changed": {"replicas": {"old": 2, "new": 5}}, ...}
+```
+
+Or use the convenience method for one-shot capture:
+
+```python
+capture = safe.record_state(
+    decision.audit_id,
+    before={"replicas": 2},
+    after={"replicas": 5},
+    action="scale-deployment",
+)
+```
+
+Inspect state captures from the CLI:
+
+```bash
+# Show state capture for a specific decision
+agent-safe audit show-state evt-abc123 --log-file ./audit.jsonl
+
+# Show state capture coverage across all decisions
+agent-safe audit state-coverage ./audit.jsonl
+
+# Filter audit log by event type
+agent-safe audit show ./audit.jsonl --event-type state_capture
+```
+
 ## Audit Log
 
 Every `check()` call is logged to an append-only, hash-chained audit file:

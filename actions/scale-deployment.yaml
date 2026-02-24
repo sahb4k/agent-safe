@@ -49,3 +49,15 @@ credentials:
     namespaces: ["{{ params.namespace }}"]
     api_groups: ["apps"]
   ttl: 300
+
+state_fields:
+  - name: replicas
+    description: Current replica count
+    type: integer
+    required: true
+  - name: available_replicas
+    description: Number of available replicas
+    type: integer
+  - name: ready_replicas
+    description: Number of ready replicas
+    type: integer

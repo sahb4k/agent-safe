@@ -23,7 +23,7 @@ Usage::
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ from agent_safe.models import (
     DelegationResult,
     ExecutionTicket,
     RiskClass,
+    StateCapture,
 )
 from agent_safe.pdp.engine import PolicyDecisionPoint, load_policies
 from agent_safe.pdp.risk_tracker import CumulativeRiskConfig, CumulativeRiskTracker
@@ -202,6 +203,9 @@ class AgentSafe:
             risk_tracker=self._risk_tracker,
         )
 
+        # Pending before-state for state capture (audit_id -> {before_state, timestamp})
+        self._pending_state: dict[str, dict[str, Any]] = {}
+
     @property
     def registry(self) -> ActionRegistry:
         """The loaded action registry."""
@@ -321,6 +325,165 @@ class AgentSafe:
         from agent_safe.audit.logger import verify_log
 
         return verify_log(self._audit.path)
+
+    # --- State Capture ---
+
+    def record_before_state(
+        self,
+        audit_id: str,
+        state: dict[str, Any],
+    ) -> None:
+        """Record the before-state for an action about to execute.
+
+        Call this BEFORE execution. The state is held in memory until
+        ``record_after_state()`` is called with the same audit_id.
+
+        Args:
+            audit_id: The audit_id from the decision that approved this action.
+            state: Dict of state fields captured from the target.
+
+        Raises:
+            AgentSafeError: If no audit logger is configured.
+        """
+        if self._audit is None:
+            raise AgentSafeError(
+                "Audit log is not configured. "
+                "Pass audit_log= to AgentSafe() to enable state capture."
+            )
+        self._pending_state[audit_id] = {
+            "before_state": state,
+            "timestamp": datetime.now(tz=UTC),
+        }
+
+    def record_after_state(
+        self,
+        audit_id: str,
+        state: dict[str, Any],
+        action: str | None = None,
+        target: str | None = None,
+        caller: str | None = None,
+    ) -> StateCapture:
+        """Record the after-state and write a combined state capture event.
+
+        Call this AFTER execution. Combines with the before-state recorded
+        via ``record_before_state()`` and writes a single state_capture
+        event to the audit log.
+
+        Args:
+            audit_id: The audit_id from the decision.
+            state: Dict of state fields captured after execution.
+            action: Action name (optional, for state_fields lookup).
+            target: Target identifier (optional).
+            caller: Caller identifier (optional).
+
+        Returns:
+            The StateCapture with before, after, and diff.
+
+        Raises:
+            AgentSafeError: If no before-state was recorded for this audit_id,
+                or no audit logger is configured.
+        """
+        if self._audit is None:
+            raise AgentSafeError("Audit log is not configured.")
+
+        pending = self._pending_state.pop(audit_id, None)
+        if pending is None:
+            raise AgentSafeError(
+                f"No before-state recorded for audit_id: {audit_id}. "
+                "Call record_before_state() first."
+            )
+
+        before_state = pending["before_state"]
+        before_ts = pending["timestamp"]
+        now = datetime.now(tz=UTC)
+        duration_ms = (now - before_ts).total_seconds() * 1000
+
+        from agent_safe.audit.differ import compute_state_diff
+
+        diff = compute_state_diff(before_state, state)
+
+        # Look up state_fields from action definition
+        state_fields_declared: list[str] = []
+        if action is not None:
+            action_def = self._registry.get(action)
+            if action_def is not None:
+                state_fields_declared = [sf.name for sf in action_def.state_fields]
+
+        capture = StateCapture(
+            audit_id=audit_id,
+            action=action or "unknown",
+            target=target or "unknown",
+            caller=caller or "unknown",
+            before_state=before_state,
+            after_state=state,
+            diff=diff,
+            captured_at=now,
+            capture_duration_ms=duration_ms,
+            state_fields_declared=state_fields_declared,
+            state_fields_captured=sorted(
+                set(before_state.keys()) | set(state.keys())
+            ),
+        )
+
+        self._audit.log_state_capture(capture)
+        return capture
+
+    def record_state(
+        self,
+        audit_id: str,
+        before: dict[str, Any],
+        after: dict[str, Any],
+        action: str | None = None,
+        target: str | None = None,
+        caller: str | None = None,
+    ) -> StateCapture:
+        """Record both before and after state in a single call.
+
+        Convenience method for executors that capture both states themselves.
+
+        Args:
+            audit_id: The audit_id from the decision.
+            before: State before execution.
+            after: State after execution.
+            action: Action name (optional).
+            target: Target identifier (optional).
+            caller: Caller identifier (optional).
+
+        Returns:
+            The StateCapture with before, after, and diff.
+        """
+        self.record_before_state(audit_id, before)
+        return self.record_after_state(
+            audit_id, after, action=action, target=target, caller=caller,
+        )
+
+    def get_state_capture(self, audit_id: str) -> StateCapture | None:
+        """Retrieve the state capture for a given decision audit_id.
+
+        Returns None if no state capture event exists for this audit_id.
+        """
+        if self._audit is None:
+            return None
+
+        events = self._audit.get_state_captures(audit_id)
+        if not events:
+            return None
+
+        # Reconstruct StateCapture from the audit event context
+        ctx = events[-1].context or {}
+        return StateCapture(
+            audit_id=ctx.get("original_audit_id", audit_id),
+            action=events[-1].action,
+            target=events[-1].target,
+            caller=events[-1].caller,
+            before_state=ctx.get("before_state", {}),
+            after_state=ctx.get("after_state", {}),
+            diff=ctx.get("diff", {}),
+            captured_at=events[-1].timestamp,
+            capture_duration_ms=ctx.get("capture_duration_ms"),
+            state_fields_declared=ctx.get("state_fields_declared", []),
+            state_fields_captured=ctx.get("state_fields_captured", []),
+        )
 
     @property
     def credential_resolver(self) -> CredentialResolver | None:

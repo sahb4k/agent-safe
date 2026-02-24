@@ -4,7 +4,7 @@
 Agent-Safe is an open-source governance/control layer for AI agents and non-human identities (NHIs).
 It is NOT an agent. It is the system that restricts and governs what agents are allowed to do.
 
-Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + SDK/CLI.
+Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + Before/After State Capture + SDK/CLI.
 
 ## Key Decisions (Locked)
 - **Deployment**: Sidecar / library (runs in customer's environment, no cloud dependency)
