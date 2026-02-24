@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-02-24
+
+Phase 2.5 -- Community Readiness.
+
+### Added
+
+- **Demo Suite**: 5 new runnable demos covering all major features. `demo_rate_limit.py` (rate limiting + circuit breaker), `demo_cumulative_risk.py` (risk scoring + escalation), `demo_delegation.py` (multi-agent delegation), `demo_approval_workflow.py` (approval lifecycle), `demo_execution_pipeline.py` (full ticket → credentials → execute → rollback pipeline).
+
+- **Integration Test Suite**: 27 tests against real infrastructure. K8sExecutor against Kind (scale, restart, logs, delete-pod, state capture, prechecks). AwsExecutor against LocalStack (EC2 stop/start, S3 operations, IAM attach/detach). SubprocessExecutor against Kind (kubectl operations). Full pipeline: check() → ticket → credential → execute (real) → state → audit.
+
+- **Integration Test Infrastructure**: Docker Compose for LocalStack, Kind cluster config (3 nodes), Kubernetes bootstrap manifests (namespace, deployment, configmap, secret). One-command setup (`bash infra/setup.sh`) and teardown (`bash infra/teardown.sh`).
+
+- **AwsExecutor `endpoint_url`**: Backward-compatible parameter to redirect boto3 calls to custom endpoints (e.g., LocalStack). Enables local testing without real AWS credentials.
+
+- **pytest integration markers**: `@pytest.mark.integration`, `@pytest.mark.kind`, `@pytest.mark.localstack` with `addopts = "-m 'not integration'"` so `pytest tests/` continues to run only fast unit tests.
+
+- **PEP 561 `py.typed` marker**: Package now declares inline type stubs.
+
+- **1,108 total tests** (1,081 unit + 27 integration).
+
 ## [0.10.0] - 2026-02-24
 
 Phase 2.5 -- Governance Dashboard.

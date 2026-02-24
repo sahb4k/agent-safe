@@ -490,6 +490,44 @@ agent-safe dashboard --dev
 cd dashboard/frontend && npm run dev  # Vite at http://localhost:5173
 ```
 
+## Examples & Demos
+
+Agent-Safe ships with 7 runnable examples in `examples/`:
+
+| Example | What it demonstrates |
+|---------|---------------------|
+| `demo_agent.py` | 5 policy scenarios: dev allow, staging role-based, prod deny, dangerous ops, batch plan |
+| `demo_rate_limit.py` | Rate limiting with sliding window + circuit breaker auto-pause |
+| `demo_cumulative_risk.py` | Per-caller risk scoring with escalation thresholds (T7 mitigation) |
+| `demo_delegation.py` | Orchestrator → worker delegation with scope narrowing and chain tracking |
+| `demo_approval_workflow.py` | Full approval lifecycle: request → review → approve → execute |
+| `demo_execution_pipeline.py` | Complete pipeline: ticket → credentials → prechecks → state → execute → rollback |
+| `claude_agent_demo.py` | Claude Agent SDK integration with 4 policy scenarios |
+
+Run any demo:
+
+```bash
+pip install -e ".[dev]"
+python examples/demo_rate_limit.py
+```
+
+## Integration Testing
+
+The `tests/integration/` suite validates executors against real infrastructure:
+
+- **K8sExecutor** tested against [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker)
+- **AwsExecutor** tested against [LocalStack](https://localstack.cloud/) (local AWS emulator)
+- **SubprocessExecutor** tested against Kind (kubectl operations)
+- **Full pipeline**: check() → ticket → credentials → execute (real K8s) → state capture → audit
+
+Integration tests skip automatically when infrastructure is not available. See `infra/setup.sh` for one-command setup.
+
+```bash
+bash infra/setup.sh                          # Start Kind + LocalStack
+pytest tests/integration/ -m integration -v  # Run integration tests
+bash infra/teardown.sh                       # Cleanup
+```
+
 ## Documentation
 
 - [Getting Started](docs/GETTING-STARTED.md) -- install, configure, first check, integrate with agent
@@ -499,7 +537,7 @@ cd dashboard/frontend && npm run dev  # Vite at http://localhost:5173
 
 ## Project Status
 
-**Alpha** (v0.10.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, and web governance dashboard. 1081 tests passing.
+**Alpha** (v0.11.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, and integration test suite against real infrastructure. 1,108 tests (1,081 unit + 27 integration).
 
 What's next:
 - Team/org features (paid tier)
