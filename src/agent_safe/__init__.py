@@ -1,6 +1,6 @@
 """Agent-Safe: A governance and policy enforcement layer for AI agents."""
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 # Optional executor imports (don't crash if optional deps are missing)
 import contextlib

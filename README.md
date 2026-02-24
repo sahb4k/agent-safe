@@ -68,7 +68,7 @@ agent-safe init myproject
 cd myproject
 ```
 
-This creates example actions, policies, and an inventory file.
+This creates `agent-safe.yaml` (with auto-generated signing key), 5 example actions, policies, and an inventory. All CLI commands and the SDK auto-discover this config file -- no flags needed.
 
 ### Check an action (CLI)
 
@@ -77,15 +77,13 @@ This creates example actions, policies, and an inventory file.
 agent-safe check restart-deployment \
     --target dev/test-app \
     --caller deploy-agent \
-    --params '{"namespace": "dev", "deployment": "app"}' \
-    --registry ./actions --policies ./policies --inventory ./inventory.yaml
+    --params '{"namespace": "dev", "deployment": "app"}'
 
 # Prod target -- should be REQUIRE_APPROVAL
 agent-safe check restart-deployment \
     --target prod/api-server \
     --caller deploy-agent \
-    --params '{"namespace": "prod", "deployment": "api"}' \
-    --registry ./actions --policies ./policies --inventory ./inventory.yaml
+    --params '{"namespace": "prod", "deployment": "api"}'
 ```
 
 ### Check an action (Python SDK)
@@ -93,12 +91,8 @@ agent-safe check restart-deployment \
 ```python
 from agent_safe import AgentSafe
 
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
-    audit_log="./audit.jsonl",
-)
+# Zero-config -- auto-discovers agent-safe.yaml
+safe = AgentSafe()
 
 decision = safe.check(
     action="restart-deployment",
@@ -119,12 +113,7 @@ print(decision.audit_id)       # evt-a1b2c3d4...
 from agent_safe import AgentSafe
 from agent_safe.models import DecisionResult
 
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
-    audit_log="./audit.jsonl",
-)
+safe = AgentSafe()
 
 def agent_step(action, target, params):
     decision = safe.check(
@@ -221,11 +210,7 @@ decisions = safe.check_plan(plan)
 For role-based access control, use JWT tokens:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-)
+safe = AgentSafe()  # signing_key loaded from agent-safe.yaml
 
 token = safe.identity.create_token(
     agent_id="deploy-agent-01",
@@ -239,15 +224,10 @@ decision = safe.check(action="restart-deployment", caller=token, ...)
 
 ## Execution Tickets
 
-When `signing_key` is set, ALLOW decisions include a signed execution ticket -- a JWT that executors can validate before acting:
+When `signing_key` is set (automatically via `agent-safe.yaml`), ALLOW decisions include a signed execution ticket -- a JWT that executors can validate before acting:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-    audit_log="./audit.jsonl",
-)
+safe = AgentSafe()
 
 decision = safe.check(action="restart-deployment", target="dev/test-app",
                        caller="agent-01", params={"namespace": "dev", "deployment": "app"})
@@ -275,8 +255,6 @@ Throttle per-agent request rates and auto-pause misbehaving agents:
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
     rate_limit={
         "max_requests": 50,              # Per caller, per window
         "window_seconds": 60,            # Sliding window
@@ -318,11 +296,7 @@ safe = AgentSafe(
 When orchestrator agents delegate sub-tasks to workers, delegation chains track provenance:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-)
+safe = AgentSafe()  # signing_key loaded from agent-safe.yaml
 
 # Create parent identity
 parent_token = safe.identity.create_token(
@@ -364,9 +338,6 @@ Prevent privilege escalation via action chaining by tracking per-caller risk ove
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
     cumulative_risk={
         "window_seconds": 3600,             # 1 hour sliding window
         "escalation_threshold": 30,          # ALLOW → REQUIRE_APPROVAL
@@ -431,14 +402,14 @@ rules:
 Validate your policies against expected outcomes:
 
 ```bash
-agent-safe test ./tests/ --registry ./actions --policies ./policies
+agent-safe test ./tests/
 ```
 
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `agent-safe init [dir]` | Scaffold a new project with example config |
+| `agent-safe init [dir]` | Scaffold a new project (config, actions, policies, inventory) |
 | `agent-safe check <action>` | Evaluate a policy decision |
 | `agent-safe test <path>` | Run policy test cases |
 | `agent-safe list-actions` | Show registered actions (with --tag/--risk filters) |
@@ -459,11 +430,9 @@ agent-safe test ./tests/ --registry ./actions --policies ./policies
 
 ```bash
 docker build -t agent-safe .
-docker run -v ./config:/config agent-safe check restart-deployment \
+docker run -v ./myproject:/project -w /project agent-safe check restart-deployment \
     --target prod/api-server \
-    --registry /config/actions \
-    --policies /config/policies \
-    --inventory /config/inventory.yaml
+    --params '{"namespace": "prod", "deployment": "api-server"}'
 ```
 
 ## Web Dashboard
@@ -537,7 +506,7 @@ bash infra/teardown.sh                       # Cleanup
 
 ## Project Status
 
-**Alpha** (v0.11.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, and integration test suite against real infrastructure. 1,108 tests (1,081 unit + 27 integration).
+**Alpha** (v0.12.0) -- zero-config setup (`agent-safe.yaml` auto-discovery), core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, and integration test suite against real infrastructure. 1,129 tests (1,102 unit + 27 integration).
 
 What's next:
 - Team/org features (paid tier)

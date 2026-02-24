@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-02-24
+
+Zero-config new user experience.
+
+### Added
+
+- **`agent-safe.yaml` config file**: Project-level configuration with auto-discovery. CLI and SDK walk parent directories to find the config file (like `.gitignore` or `pyproject.toml`). All paths resolved relative to the YAML file's location.
+
+- **Config loader module** (`agent_safe.config`): `find_config()`, `load_config()`, `generate_signing_key()`, `AgentSafeConfig` dataclass. New public exports from `agent_safe`.
+
+- **Zero-config SDK**: `AgentSafe()` with no arguments now works — auto-discovers `agent-safe.yaml` for registry, policies, inventory, audit log, and signing key. New `config=` and `auto_discover=` parameters. Explicit args always override.
+
+- **Config-aware CLI**: All 14 CLI commands fall back to `agent-safe.yaml` values. `--signing-key` is no longer `required=True` on 6 commands (ticket verify, delegation create/verify, runner execute/dry-run, credential resolve) — reads from config instead.
+
+- **Richer `init` scaffolding**: `agent-safe init` now creates 9 files: `agent-safe.yaml` (with auto-generated 256-bit HMAC signing key), `.gitignore` (excludes config and secrets), 5 example actions spanning LOW to HIGH risk and K8s + AWS platforms, default policy, and inventory with 4 targets (3 K8s + 1 AWS).
+
+- **19 new config tests** + 2 new init tests. **1,102 total unit tests**.
+
+### Fixed
+
+- Scaffolded `restart-deployment.yaml` now correctly has `reversible: false` (was `true`).
+
 ## [0.11.0] - 2026-02-24
 
 Phase 2.5 -- Community Readiness.

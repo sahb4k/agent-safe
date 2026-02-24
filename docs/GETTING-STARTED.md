@@ -24,50 +24,64 @@ cd myproject
 ```
 
 This creates:
-- `actions/restart-deployment.yaml` - example action definition
-- `policies/default.yaml` - example policies (allow dev, require approval for prod)
-- `inventory.yaml` - example target inventory
+- `agent-safe.yaml` - project config with auto-generated signing key
+- `.gitignore` - excludes secrets and runtime files
+- `actions/` - 5 example actions (LOW to HIGH risk, K8s + AWS)
+- `policies/default.yaml` - example policies (allow dev, require approval for prod/critical)
+- `inventory.yaml` - 4 example targets (dev, staging, prod K8s + prod AWS)
+
+The generated `agent-safe.yaml` looks like:
+
+```yaml
+# Paths (relative to this file)
+registry: ./actions
+policies: ./policies
+inventory: ./inventory.yaml
+audit_log: ./audit.jsonl
+
+# HMAC signing key for execution tickets and identity tokens.
+signing_key: "a1b2c3...64-hex-chars..."
+```
+
+All CLI commands and the SDK auto-discover this file, so you don't need to pass `--registry`, `--policies`, `--inventory`, or `--signing-key` flags.
 
 ### 2. Validate your config
 
 ```bash
-agent-safe validate --registry ./actions --policies ./policies --inventory ./inventory.yaml
+agent-safe validate
 ```
 
-### 3. Check an action from the CLI
+### 3. List available actions
+
+```bash
+agent-safe list-actions
+```
+
+### 4. Check an action from the CLI
 
 ```bash
 # Dev target - should be ALLOW
 agent-safe check restart-deployment \
     --target dev/test-app \
     --caller deploy-agent \
-    --params '{"namespace": "dev", "deployment": "app"}' \
-    --registry ./actions \
-    --policies ./policies \
-    --inventory ./inventory.yaml
+    --params '{"namespace": "dev", "deployment": "app"}'
 
 # Prod target - should be REQUIRE_APPROVAL
 agent-safe check restart-deployment \
     --target prod/api-server \
     --caller deploy-agent \
-    --params '{"namespace": "prod", "deployment": "api"}' \
-    --registry ./actions \
-    --policies ./policies \
-    --inventory ./inventory.yaml
+    --params '{"namespace": "prod", "deployment": "api"}'
 ```
 
-### 4. Use the Python SDK
+No `--registry` or `--policies` needed — they're read from `agent-safe.yaml`.
+
+### 5. Use the Python SDK
 
 ```python
 from agent_safe import AgentSafe
 
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
-    audit_log="./audit.jsonl",     # optional: enables audit logging
-    signing_key="your-secret-key", # optional: enables JWT identity
-)
+# Zero-config — auto-discovers agent-safe.yaml
+safe = AgentSafe()
 
 # Check a single action
 decision = safe.check(
@@ -84,18 +98,25 @@ print(decision.risk_class)    # Action's base risk class
 print(decision.effective_risk) # Risk after considering target sensitivity
 ```
 
-### 5. Integrate with your agent
+You can also pass paths explicitly — explicit args always override the config file:
 
 ```python
-from agent_safe import AgentSafe
-from agent_safe.models import DecisionResult
-
 safe = AgentSafe(
     registry="./actions",
     policies="./policies",
     inventory="./inventory.yaml",
     audit_log="./audit.jsonl",
+    signing_key="your-secret-key",
 )
+```
+
+### 6. Integrate with your agent
+
+```python
+from agent_safe import AgentSafe
+from agent_safe.models import DecisionResult
+
+safe = AgentSafe()
 
 def agent_step(action, target, params):
     """Before executing any action, check with Agent-Safe."""
@@ -115,6 +136,25 @@ def agent_step(action, target, params):
         print(f"Blocked: {decision.reason}")
         # Skip or retry with different params
 ```
+
+## Config File (`agent-safe.yaml`)
+
+Agent-Safe looks for `agent-safe.yaml` in the current directory and parent directories (like `.gitignore` or `pyproject.toml`). All paths in the config are resolved relative to the YAML file's location.
+
+Supported fields:
+
+```yaml
+registry: ./actions          # Path to actions directory
+policies: ./policies         # Path to policies directory
+inventory: ./inventory.yaml  # Path to inventory file
+audit_log: ./audit.jsonl     # Path to audit log
+signing_key: "hex-string"    # HMAC signing key (256-bit)
+issuer: agent-safe           # JWT issuer name
+```
+
+**Precedence:** explicit args > config file > built-in defaults (`./actions`, `./policies`, etc.)
+
+**Security:** The config file contains your signing key. Add it to `.gitignore` (the `init` command does this automatically).
 
 ## Batch Plan Checking
 
@@ -136,11 +176,7 @@ decisions = safe.check_plan(plan)
 For role-based access control, use JWT tokens:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-)
+safe = AgentSafe()  # signing_key loaded from agent-safe.yaml
 
 # Create a token for an agent
 token = safe.identity.create_token(
@@ -162,11 +198,7 @@ decision = safe.check(
 When `signing_key` is set, ALLOW decisions include a signed execution ticket that executors can validate:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-)
+safe = AgentSafe()
 
 decision = safe.check(
     action="restart-deployment", target="dev/test-app",
@@ -193,8 +225,10 @@ if result.valid:
 Or from the CLI:
 
 ```bash
-agent-safe ticket verify "$TOKEN" --signing-key "shared-secret-key"
+agent-safe ticket verify "$TOKEN"
 ```
+
+The `--signing-key` flag is only needed if you don't have an `agent-safe.yaml`.
 
 ## Rate Limiting
 
@@ -202,8 +236,6 @@ Throttle per-agent request rates and auto-pause misbehaving agents:
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
     rate_limit={
         "max_requests": 50,               # Per caller, per window
         "window_seconds": 60,             # Sliding window
@@ -221,13 +253,10 @@ Prevent privilege escalation via action chaining (Threat T7). When an agent chai
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
     cumulative_risk={
         "window_seconds": 3600,             # 1 hour sliding window
-        "escalation_threshold": 30,          # ALLOW → REQUIRE_APPROVAL
-        "deny_threshold": 75,                # Any non-DENY → DENY
+        "escalation_threshold": 30,          # ALLOW -> REQUIRE_APPROVAL
+        "deny_threshold": 75,                # Any non-DENY -> DENY
         "risk_scores": {                     # Points per risk class
             "low": 1, "medium": 5, "high": 15, "critical": 50,
         },
@@ -297,9 +326,9 @@ rules:
 ```
 
 The `require_ticket` field supports three states:
-- `true` — rule only matches when `ticket_id` is provided
-- `false` — rule only matches when `ticket_id` is NOT provided
-- `null`/omitted — rule matches regardless of ticket presence
+- `true` -- rule only matches when `ticket_id` is provided
+- `false` -- rule only matches when `ticket_id` is NOT provided
+- `null`/omitted -- rule matches regardless of ticket presence
 
 From the CLI:
 
@@ -323,19 +352,14 @@ decisions = safe.check_plan([
 ])
 ```
 
-The ticket ID is opaque to Agent-Safe — it can be a JIRA key, ServiceNow incident number, URL, or any string. Validation of the ticket's existence is the caller's responsibility.
+The ticket ID is opaque to Agent-Safe -- it can be a JIRA key, ServiceNow incident number, URL, or any string. Validation of the ticket's existence is the caller's responsibility.
 
 ## Before/After State Capture
 
 Record target state before and after action execution for audit and compliance:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    inventory="./inventory.yaml",
-    audit_log="./audit.jsonl",
-)
+safe = AgentSafe()
 
 # 1. Get a decision
 decision = safe.check(
@@ -400,8 +424,8 @@ When a reversible action has state capture data, generate a rollback plan:
 plan = safe.generate_rollback(decision.audit_id)
 print(f"Rollback: {plan.rollback_action}")
 print(f"Params: {plan.rollback_params}")
-# → Rollback: scale-deployment
-# → Params: {"namespace": "dev", "deployment": "api", "replicas": 2}
+# -> Rollback: scale-deployment
+# -> Params: {"namespace": "dev", "deployment": "api", "replicas": 2}
 
 # Run the rollback through PDP (no unaudited rollbacks)
 rb_decision = safe.check_rollback(decision.audit_id)
@@ -456,9 +480,6 @@ Ship events to external backends automatically as they're logged:
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    audit_log="./audit.jsonl",
     audit_shippers={"webhook_url": "https://siem.example.com/ingest"},
 )
 # Every check() now ships events to the webhook after local write
@@ -468,9 +489,6 @@ Multiple backends can be configured simultaneously:
 
 ```python
 safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    audit_log="./audit.jsonl",
     audit_shippers={
         "filesystem_path": "/mnt/nfs/audit-backup.jsonl",
         "webhook_url": "https://siem.example.com/ingest",
@@ -486,11 +504,7 @@ For S3 shipping, install the optional dependency: `pip install agent-safe[s3]`
 When an orchestrator agent needs to delegate sub-tasks to worker agents, use delegation tokens:
 
 ```python
-safe = AgentSafe(
-    registry="./actions",
-    policies="./policies",
-    signing_key="shared-secret-key",
-)
+safe = AgentSafe()  # signing_key loaded from agent-safe.yaml
 
 # Create orchestrator identity
 parent_token = safe.identity.create_token(
@@ -523,11 +537,10 @@ From the CLI:
 # Create a delegation token
 agent-safe delegation create "$PARENT_TOKEN" \
     --child-id worker-01 \
-    --roles deployer \
-    --signing-key "shared-secret-key"
+    --roles deployer
 
 # Verify a delegation token
-agent-safe delegation verify "$CHILD_TOKEN" --signing-key "shared-secret-key"
+agent-safe delegation verify "$CHILD_TOKEN"
 ```
 
 ## Policy Testing
@@ -535,14 +548,14 @@ agent-safe delegation verify "$CHILD_TOKEN" --signing-key "shared-secret-key"
 Validate your policies against expected outcomes with table-driven test cases:
 
 ```bash
-agent-safe test ./tests/ --registry ./actions --policies ./policies
+agent-safe test ./tests/
 ```
 
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `agent-safe init [dir]` | Scaffold a new project |
+| `agent-safe init [dir]` | Scaffold a new project (config, actions, policies, inventory) |
 | `agent-safe check <action>` | Evaluate a policy decision |
 | `agent-safe test <path>` | Run policy test cases |
 | `agent-safe list-actions` | Show registered actions |
@@ -556,6 +569,8 @@ agent-safe test ./tests/ --registry ./actions --policies ./policies
 | `agent-safe approval list/show/approve/deny` | Manage approval requests |
 | `agent-safe delegation create <token>` | Create a delegation token |
 | `agent-safe delegation verify <token>` | Verify delegation token and chain |
+
+All commands auto-discover `agent-safe.yaml`. Use `--registry`, `--policies`, etc. to override.
 
 ## Next Steps
 
