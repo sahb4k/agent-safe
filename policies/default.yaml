@@ -60,6 +60,8 @@ rules:
         - restart-deployment
         - scale-deployment
         - delete-pod
+        - update-image
+        - update-configmap
       targets:
         environments:
           - staging

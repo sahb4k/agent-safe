@@ -96,6 +96,12 @@ Phase 3           → Agent Supervisor       (separate product decision)
   - [x] Action catalogue browser
   - [x] Policy visualizer (which rules match which targets)
   - [x] Agent activity feed
+- [x] **Demo Suite** (community readiness):
+  - [x] Approval workflow E2E (request → review → approve → execute)
+  - [x] Multi-agent delegation (scope narrowing, chain tracking, depth limits)
+  - [x] Cumulative risk escalation (risk meter, threshold escalation)
+  - [x] Full execution pipeline (ticket → credentials → prechecks → state → execute → rollback)
+  - [x] Rate limiting + circuit breaker (flood protection, per-caller isolation)
 - **Team/Org Features** (paid tier):
   - Multi-cluster policy management (push policies to multiple sidecars)
   - Centralized audit aggregation (sidecars ship logs to dashboard)
