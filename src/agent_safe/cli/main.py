@@ -3,6 +3,7 @@
 Commands:
     init            Scaffold a new Agent-Safe project
     check           Evaluate a policy decision for an action
+    test            Run policy test cases
     list-actions    Show all registered actions
     validate        Validate config files (actions, policies, inventory)
     audit verify    Verify audit log chain integrity
@@ -24,6 +25,7 @@ from agent_safe.models import DecisionResult
 from agent_safe.pdp.engine import PDPError, load_policies
 from agent_safe.registry.loader import RegistryError, load_registry
 from agent_safe.sdk.client import AgentSafe
+from agent_safe.testing.runner import PolicyTestError, load_test_files, run_tests
 
 # --- Defaults ---
 
@@ -169,6 +171,86 @@ def init(directory: str) -> None:
                     f"--policies {policies_dir} --inventory {inventory_file}")
     else:
         click.echo("Nothing to create — all files already exist.")
+
+
+# --- test command ---
+
+
+@cli.command("test")
+@click.argument("test_path")
+@click.option(
+    "--registry", default=DEFAULT_REGISTRY,
+    help="Path to actions directory",
+)
+@click.option(
+    "--policies", default=DEFAULT_POLICIES,
+    help="Path to policies directory",
+)
+@click.option(
+    "--inventory", default=DEFAULT_INVENTORY,
+    help="Path to inventory YAML file",
+)
+def test_policies(
+    test_path: str,
+    registry: str,
+    policies: str,
+    inventory: str,
+) -> None:
+    """Run policy test cases against the current configuration.
+
+    TEST_PATH is a YAML file or directory of YAML files containing test cases.
+    Each test declares an action/target/caller/params and the expected decision.
+    """
+    # Load test cases
+    try:
+        cases = load_test_files(Path(test_path))
+    except PolicyTestError as e:
+        click.echo(click.style("ERROR", fg="red") + f"  {e}", err=True)
+        sys.exit(1)
+
+    # Load policy engine
+    inv_path: str | None = inventory if Path(inventory).exists() else None
+    try:
+        safe = AgentSafe(
+            registry=registry,
+            policies=policies,
+            inventory=inv_path,
+        )
+    except Exception as e:
+        click.echo(f"Error loading config: {e}", err=True)
+        sys.exit(1)
+
+    # Run tests
+    suite = run_tests(safe, cases)
+
+    # Report results
+    for result in suite.results:
+        if result.passed:
+            click.echo(
+                click.style("  PASS", fg="green")
+                + f"  {result.case.name}"
+            )
+        else:
+            click.echo(
+                click.style("  FAIL", fg="red")
+                + f"  {result.case.name}"
+                + f"  (expected {result.case.expect},"
+                + f" got {result.actual})"
+            )
+            click.echo(f"        reason: {result.reason}")
+
+    # Summary
+    click.echo("")
+    if suite.all_passed:
+        click.echo(click.style(
+            f"All {suite.total} test(s) passed.", fg="green", bold=True,
+        ))
+    else:
+        click.echo(
+            click.style(f"{suite.failed} failed", fg="red", bold=True)
+            + f", {suite.passed} passed, {suite.total} total."
+        )
+        sys.exit(1)
 
 
 # --- check command ---

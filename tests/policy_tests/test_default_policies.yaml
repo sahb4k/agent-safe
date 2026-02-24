@@ -1,0 +1,113 @@
+# Policy test cases for the default policy set.
+# Run with: agent-safe test tests/policy_tests/
+
+tests:
+  # --- Dev environment: unrestricted ---
+  - name: dev-restart-allowed
+    action: restart-deployment
+    target: dev/test-app
+    params:
+      namespace: dev
+      deployment: app
+    expect: allow
+
+  - name: dev-scale-allowed
+    action: scale-deployment
+    target: dev/test-app
+    params:
+      namespace: dev
+      deployment: app
+      replicas: 5
+    expect: allow
+
+  - name: dev-delete-pod-allowed
+    action: delete-pod
+    target: dev/test-app
+    params:
+      namespace: dev
+      pod: test-pod
+    expect: allow
+
+  - name: dev-read-logs-allowed
+    action: get-pod-logs
+    target: dev/test-app
+    params:
+      namespace: dev
+      pod: test-pod
+    expect: allow
+
+  # --- Prod environment: requires approval ---
+  - name: prod-restart-requires-approval
+    action: restart-deployment
+    target: prod/api-server
+    params:
+      namespace: prod
+      deployment: api
+    expect: require_approval
+
+  - name: prod-scale-requires-approval
+    action: scale-deployment
+    target: prod/api-server
+    params:
+      namespace: prod
+      deployment: api
+      replicas: 3
+    expect: require_approval
+
+  # --- Prod: critical risk actions (critical-risk rule at p1000 fires first) ---
+  - name: prod-drain-node-requires-approval
+    action: drain-node
+    target: prod/worker-node-01
+    params:
+      node: worker-01
+    expect: require_approval
+
+  # --- Prod: namespace deletion (critical risk rule fires before deny rule) ---
+  - name: prod-delete-namespace-critical-risk
+    action: delete-namespace
+    target: prod/payments-ns
+    params:
+      namespace: payments
+    expect: require_approval
+
+  # --- Staging: read actions allowed ---
+  - name: staging-get-logs-allowed
+    action: get-pod-logs
+    target: staging/api-server
+    params:
+      namespace: staging
+      pod: api-pod
+    expect: allow
+
+  - name: staging-rollout-status-allowed
+    action: rollout-status
+    target: staging/api-server
+    params:
+      namespace: staging
+      deployment: api
+    expect: allow
+
+  # --- Unknown action: denied ---
+  - name: unknown-action-denied
+    action: nonexistent-action
+    target: dev/test-app
+    expect: deny
+
+  # --- Parameter validation ---
+  - name: scale-over-max-denied
+    action: scale-deployment
+    target: dev/test-app
+    params:
+      namespace: dev
+      deployment: app
+      replicas: 101
+    expect: deny
+
+  - name: extra-params-denied
+    action: restart-deployment
+    target: dev/test-app
+    params:
+      namespace: dev
+      deployment: app
+      evil_extra: hack
+    expect: deny
