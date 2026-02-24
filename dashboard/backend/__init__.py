@@ -1,0 +1,1 @@
+"""Dashboard backend — FastAPI application."""

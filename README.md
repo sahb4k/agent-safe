@@ -57,6 +57,7 @@ Agent: "OK, I'll queue this for human review."
 pip install agent-safe            # Core (policy engine, DryRun/Subprocess executors)
 pip install agent-safe[k8s]       # + K8sExecutor (kubernetes Python client)
 pip install agent-safe[aws]       # + AwsExecutor (boto3)
+pip install agent-safe[dashboard] # + Web dashboard (FastAPI + uvicorn)
 pip install agent-safe[all]       # Everything
 ```
 
@@ -465,6 +466,30 @@ docker run -v ./config:/config agent-safe check restart-deployment \
     --inventory /config/inventory.yaml
 ```
 
+## Web Dashboard
+
+Agent-Safe includes a read-only governance dashboard for real-time visibility:
+
+```bash
+pip install agent-safe[dashboard]
+agent-safe dashboard
+# Opens at http://127.0.0.1:8420
+```
+
+Pages:
+- **Dashboard** -- overview stats, timeline chart, recent decisions
+- **Audit Log** -- filterable, paginated event table
+- **Actions** -- browse all 33 action definitions with risk badges
+- **Policies** -- priority-sorted rules with inventory match analysis
+- **Activity** -- live feed with 5s auto-refresh
+
+For frontend development, use `--dev` to enable CORS for the Vite dev server:
+
+```bash
+agent-safe dashboard --dev
+cd dashboard/frontend && npm run dev  # Vite at http://localhost:5173
+```
+
 ## Documentation
 
 - [Getting Started](docs/GETTING-STARTED.md) -- install, configure, first check, integrate with agent
@@ -474,10 +499,11 @@ docker run -v ./config:/config agent-safe check restart-deployment \
 
 ## Project Status
 
-**Alpha** (v0.9.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor. 1007 tests passing.
+**Alpha** (v0.10.0) -- core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, and web governance dashboard. 1081 tests passing.
 
 What's next:
-- Web dashboard (Phase 2.5)
+- Team/org features (paid tier)
+- Multi-cluster policy management
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
 

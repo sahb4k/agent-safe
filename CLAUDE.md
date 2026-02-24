@@ -4,7 +4,7 @@
 Agent-Safe is an open-source governance/control layer for AI agents and non-human identities (NHIs).
 It is NOT an agent. It is the system that restricts and governs what agents are allowed to do.
 
-Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + Before/After State Capture + Rollback Pairing + Runner/Executor (DryRun, Subprocess, K8s, AWS) + SDK/CLI.
+Core product: A policy decision sidecar — Action Registry + Policy Decision Point (PDP) + Audit Log + Execution Tickets + Rate Limiting + Approval Workflows + Credential Gating + Multi-Agent Delegation + Cumulative Risk Scoring + Ticket/Incident Linkage + Before/After State Capture + Rollback Pairing + Runner/Executor (DryRun, Subprocess, K8s, AWS) + SDK/CLI + Web Dashboard.
 
 ## Key Decisions (Locked)
 - **Deployment**: Sidecar / library (runs in customer's environment, no cloud dependency)
@@ -14,7 +14,7 @@ Core product: A policy decision sidecar — Action Registry + Policy Decision Po
 - **Tech stack**: Python (most agent frameworks are Python)
 - **License**: Apache 2.0
 
-## Architecture (Phase 2 — Current)
+## Architecture (Phase 2.5 — Current)
 ```
 Agent → SDK → Rate Limiter → PDP → Policy Decision
                                          │
@@ -74,6 +74,19 @@ agent-safe/
 │       │   └── aws_executor.py  # AwsExecutor (boto3)
 │       ├── sdk/            # Public SDK interface (AgentSafe class)
 │       └── cli/            # CLI entry point
+├── dashboard/
+│   ├── backend/            # FastAPI dashboard backend
+│   │   ├── app.py          # App factory
+│   │   ├── config.py       # DashboardConfig
+│   │   ├── schemas.py      # Pydantic response models
+│   │   ├── routers/        # API routers (audit, actions, policies, activity, health)
+│   │   └── services/       # Business logic (audit, action, policy, activity)
+│   └── frontend/           # React + TypeScript + Vite + Tailwind SPA
+│       ├── src/
+│       │   ├── api/        # API client + React Query hooks
+│       │   ├── pages/      # Dashboard, Audit, Actions, Policies, Activity
+│       │   └── components/ # Layout, StatsCard, RiskBadge, etc.
+│       └── dist/           # Built frontend (served by FastAPI)
 ├── actions/                # YAML action definitions (K8s + AWS)
 ├── policies/               # Policy definitions
 ├── tests/
@@ -96,14 +109,14 @@ agent-safe/
 4. **Sidecar, not SaaS** — decisions and data stay in the customer's environment
 5. **Advisory before enforced** — log and decide now, gate credentials later
 
-## What NOT to Build Yet (Phase 2.5 and beyond)
+## What NOT to Build Yet (Phase 3 and beyond)
 - No cloud infrastructure (sidecar/library only)
-- No dashboard (Phase 2.5)
 - No agent supervisor (separate product decision)
+- No multi-cluster policy sync (Phase 2.5 paid tier)
 
 ## Documentation
 - `docs/MVP-PLAN.md` — 6–8 week detailed build plan (Phase 1)
-- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 ✅)
+- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 ✅, Phase 2.5 in progress)
 - `docs/ARCHITECTURE.md` — Architecture decisions and diagrams
 - `docs/GETTING-STARTED.md` — Installation, quick start, SDK usage, all features
 - `docs/CREDENTIAL-SCOPING.md` — Vault-based credential gating design (implemented)

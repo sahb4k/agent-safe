@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 *.egg-info/
 *.egg
-dist/
+/dist/
 build/
 *.whl
 
@@ -37,6 +37,9 @@ htmlcov/
 # Audit logs (generated at runtime, not committed)
 *.jsonl
 examples/demo_audit.jsonl
+
+# Node (dashboard frontend)
+node_modules/
 
 # Environment / secrets
 .env

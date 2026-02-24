@@ -8,8 +8,8 @@ Agent-Safe becomes the standard governance layer for AI agents operating on infr
 Phase 1 (MVP)     → Policy Sidecar        (6-8 weeks)   ✅ COMPLETE
 Phase 1.5         → Execution Tickets      (4-6 weeks)   ✅ COMPLETE
 Phase 2.1         → Delegation + Creds     (4 weeks)     ✅ COMPLETE
-Phase 2           → Change Control         (8-12 weeks)  ← WE ARE HERE
-Phase 2.5         → Dashboard + SaaS tier  (6-8 weeks)
+Phase 2           → Change Control         (8-12 weeks)  ✅ COMPLETE
+Phase 2.5         → Dashboard + SaaS tier  (6-8 weeks)  ← WE ARE HERE
 Phase 3           → Agent Supervisor       (separate product decision)
 ```
 
@@ -86,16 +86,16 @@ Phase 3           → Agent Supervisor       (separate product decision)
 ---
 
 ## Phase 2.5: Dashboard + Commercial Tier — Weeks 24–32
-**Depends on**: Phase 2, sufficient open-source adoption to justify investment
+**Status**: In progress (v0.10.0 — free tier dashboard complete)
 
 **Goal**: Monetisation layer. A hosted control plane that adds centralized visibility without replacing the local PDP.
 
 **Deliverables**:
-- **Web Dashboard** (read-only for free tier):
-  - Audit log viewer (search, filter, timeline)
-  - Action catalogue browser
-  - Policy visualizer (which rules match which targets)
-  - Agent activity feed
+- [x] **Web Dashboard** (read-only for free tier):
+  - [x] Audit log viewer (search, filter, timeline)
+  - [x] Action catalogue browser
+  - [x] Policy visualizer (which rules match which targets)
+  - [x] Agent activity feed
 - **Team/Org Features** (paid tier):
   - Multi-cluster policy management (push policies to multiple sidecars)
   - Centralized audit aggregation (sidecars ship logs to dashboard)

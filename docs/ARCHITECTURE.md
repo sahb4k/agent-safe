@@ -307,3 +307,17 @@ Agent → SDK → PDP → ALLOW + signed Execution Ticket
 | Testing | pytest | Standard Python testing |
 | Linting | ruff | Fast, replaces flake8+isort+black |
 | CI | GitHub Actions | Free for open-source |
+| Dashboard backend | FastAPI + uvicorn | Async-capable, auto OpenAPI docs, Pydantic native |
+| Dashboard frontend | React 18 + TypeScript + Vite + Tailwind | Modern SPA stack, fast builds, utility-first CSS |
+| Charts | Recharts | Lightweight, composable React chart library |
+| Server state | TanStack Query v5 | Automatic caching, refetching, no Redux needed |
+
+---
+
+## D33: Dashboard Architecture
+
+**Decision**: Local-first read-only dashboard served by `agent-safe dashboard`. FastAPI backend imports agent_safe library directly, reads existing YAML/JSONL files. React SPA frontend built to static files and served by FastAPI.
+
+**Alternatives considered**: Separate SaaS dashboard (too early), Streamlit (too limited for real app), server-rendered templates (less interactive).
+
+**Rationale**: Local-first matches the sidecar philosophy. Direct library imports avoid reimplementing data access. Pre-built frontend dist means `pip install agent-safe[dashboard]` gets a working UI with no Node.js needed at runtime. CORS dev mode supports frontend hot-reload during development.

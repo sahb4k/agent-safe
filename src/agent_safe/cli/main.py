@@ -1752,6 +1752,59 @@ def runner_dry_run(
                     click.echo(f"    {status}: {pc.name}")
 
 
+# --- dashboard command ---
+
+
+@cli.command()
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--port", default=8420, type=int, help="Port number")
+@click.option("--dev", is_flag=True, help="Enable CORS for frontend dev server")
+@click.option("--registry", default=DEFAULT_REGISTRY, help="Path to actions directory")
+@click.option("--policies", default=DEFAULT_POLICIES, help="Path to policies directory")
+@click.option("--inventory", default=DEFAULT_INVENTORY, help="Path to inventory file")
+@click.option("--audit-log", default=DEFAULT_AUDIT_LOG, help="Path to audit log")
+def dashboard(
+    host: str,
+    port: int,
+    dev: bool,
+    registry: str,
+    policies: str,
+    inventory: str,
+    audit_log: str,
+) -> None:
+    """Launch the governance dashboard web UI."""
+    try:
+        import uvicorn  # noqa: F811
+    except ImportError:
+        click.echo(
+            "Dashboard requires extra dependencies. Install with:\n"
+            "  pip install agent-safe[dashboard]",
+            err=True,
+        )
+        sys.exit(1)
+
+    from dashboard.backend.app import create_app
+    from dashboard.backend.config import DashboardConfig
+
+    config = DashboardConfig(
+        host=host,
+        port=port,
+        actions_dir=registry,
+        policies_dir=policies,
+        inventory_file=inventory,
+        audit_log=audit_log,
+        dev_mode=dev,
+    )
+
+    app = create_app(config)
+
+    click.echo(f"Agent-Safe Dashboard — http://{host}:{port}")
+    if dev:
+        click.echo("  Dev mode: CORS enabled for http://localhost:5173")
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 # --- helpers ---
 
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-02-24
+
+Phase 2.5 -- Governance Dashboard.
+
+### Added
+
+- **Web Dashboard**: Read-only governance dashboard served locally via `agent-safe dashboard`. FastAPI backend with React/TypeScript/Tailwind frontend. Browse audit events, actions, policies, and live activity.
+
+- **Dashboard Backend**: 5 API routers (audit, actions, policies, activity, health) with 4 services. Paginated/filterable audit events, aggregate stats, event timeline, action detail, policy match analysis, real-time activity feed. Lightweight TTL-based caching.
+
+- **Dashboard Frontend**: React 18 SPA with Vite, TanStack Query, Recharts, and Tailwind CSS. 6 pages: Dashboard (overview stats + timeline chart), Audit (filterable event table), Actions (grid with risk badges), ActionDetail (full definition view), Policies (priority-sorted table with match analysis), Activity (auto-refresh live feed).
+
+- **CLI `dashboard` command**: `agent-safe dashboard [--dev] [--port 8420]`. Launches uvicorn serving the FastAPI app with built frontend static files. `--dev` enables CORS for Vite dev server.
+
+- **Optional dependency**: `pip install agent-safe[dashboard]` for FastAPI + uvicorn. Core package works without dashboard deps.
+
+- **74 new tests** across 2 files (test_dashboard_api.py, test_dashboard_services.py). **1081 total tests**.
+
 ## [0.9.0] - 2026-02-24
 
 Phase 2 -- Multi-Environment Executors.
