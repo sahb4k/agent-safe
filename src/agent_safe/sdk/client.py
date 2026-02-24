@@ -7,6 +7,10 @@ Usage::
 
     from agent_safe import AgentSafe
 
+    # Zero-config — auto-discovers agent-safe.yaml
+    safe = AgentSafe()
+
+    # Or explicit paths
     safe = AgentSafe(
         registry="./actions/",
         policies="./policies/",
@@ -74,8 +78,8 @@ class AgentSafe:
 
     def __init__(
         self,
-        registry: str | Path,
-        policies: str | Path,
+        registry: str | Path | None = None,
+        policies: str | Path | None = None,
         inventory: str | Path | None = None,
         audit_log: str | Path | None = None,
         signing_key: str | None = None,
@@ -87,6 +91,8 @@ class AgentSafe:
         approval_notifiers: list[ApprovalNotifier] | dict | None = None,
         credential_vault: CredentialVault | dict | None = None,
         cumulative_risk: CumulativeRiskConfig | dict | None = None,
+        config: str | Path | None = None,
+        auto_discover: bool = True,
     ) -> None:
         """Initialize AgentSafe.
 
@@ -116,18 +122,43 @@ class AgentSafe:
                 Pass a CumulativeRiskConfig instance, or a dict with
                 keys: window_seconds, risk_scores, escalation_threshold,
                 deny_threshold.
+            config: Explicit path to ``agent-safe.yaml`` (optional).
+            auto_discover: Walk parent directories for ``agent-safe.yaml``
+                (default ``True``).  Set to ``False`` to skip auto-discovery.
         """
-        self._registry: ActionRegistry = load_registry(registry)
-        self._rules = load_policies(policies)
+        from agent_safe.config import load_config
+
+        _cfg = load_config(config, auto_discover=auto_discover)
+
+        _registry = registry or _cfg.registry
+        _policies = policies or _cfg.policies
+
+        if _registry is None or _policies is None:
+            raise AgentSafeError(
+                "registry and policies are required. "
+                "Pass them explicitly or create an agent-safe.yaml."
+            )
+
+        _inventory = inventory or _cfg.inventory
+        _audit_log = audit_log or _cfg.audit_log
+        _signing_key = signing_key or _cfg.signing_key
+        _issuer = issuer if issuer != "agent-safe" else _cfg.issuer
+        _rate_limit = rate_limit or _cfg.rate_limit
+        _cumulative_risk = cumulative_risk or _cfg.cumulative_risk
+
+        self._registry: ActionRegistry = load_registry(_registry)
+        self._rules = load_policies(_policies)
 
         self._inventory: Inventory | None = None
-        if inventory is not None:
-            self._inventory = load_inventory(inventory)
+        if _inventory is not None:
+            inv_path = Path(_inventory)
+            if inv_path.exists():
+                self._inventory = load_inventory(_inventory)
 
         # Resolve shippers
         shippers: list[AuditShipper] | None = None
         if audit_shippers is not None:
-            if audit_log is None:
+            if _audit_log is None:
                 raise AgentSafeError(
                     "audit_shippers requires audit_log to be set"
                 )
@@ -137,28 +168,28 @@ class AgentSafe:
                 shippers = audit_shippers
 
         self._audit: AuditLogger | None = None
-        if audit_log is not None:
-            self._audit = AuditLogger(Path(audit_log), shippers=shippers)
+        if _audit_log is not None:
+            self._audit = AuditLogger(Path(_audit_log), shippers=shippers)
 
         self._identity: IdentityManager | None = None
-        if signing_key is not None:
-            self._identity = IdentityManager(signing_key, issuer=issuer)
+        if _signing_key is not None:
+            self._identity = IdentityManager(_signing_key, issuer=_issuer)
 
         self._ticket_issuer: TicketIssuer | None = None
-        if signing_key is not None:
-            self._ticket_issuer = TicketIssuer(signing_key, issuer=issuer)
+        if _signing_key is not None:
+            self._ticket_issuer = TicketIssuer(_signing_key, issuer=_issuer)
 
         self._rate_limiter: RateLimiter | None = None
-        if rate_limit is not None:
-            if isinstance(rate_limit, dict):
-                rate_limit = RateLimitConfig(**rate_limit)
-            self._rate_limiter = RateLimiter(rate_limit)
+        if _rate_limit is not None:
+            if isinstance(_rate_limit, dict):
+                _rate_limit = RateLimitConfig(**_rate_limit)
+            self._rate_limiter = RateLimiter(_rate_limit)
 
         self._risk_tracker: CumulativeRiskTracker | None = None
-        if cumulative_risk is not None:
-            if isinstance(cumulative_risk, dict):
-                cumulative_risk = CumulativeRiskConfig(**cumulative_risk)
-            self._risk_tracker = CumulativeRiskTracker(cumulative_risk)
+        if _cumulative_risk is not None:
+            if isinstance(_cumulative_risk, dict):
+                _cumulative_risk = CumulativeRiskConfig(**_cumulative_risk)
+            self._risk_tracker = CumulativeRiskTracker(_cumulative_risk)
 
         # Approval store
         self._approval_store: FileApprovalStore | None = None

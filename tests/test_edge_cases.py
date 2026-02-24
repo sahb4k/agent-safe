@@ -294,9 +294,27 @@ class TestInitCommand:
         result = runner().invoke(cli, ["init", str(target)])
         assert result.exit_code == 0
         assert "Created" in result.output
+        assert (target / "agent-safe.yaml").exists()
+        assert (target / ".gitignore").exists()
         assert (target / "actions" / "restart-deployment.yaml").exists()
+        assert (target / "actions" / "get-pod-logs.yaml").exists()
+        assert (target / "actions" / "scale-deployment.yaml").exists()
+        assert (target / "actions" / "update-image.yaml").exists()
+        assert (target / "actions" / "ec2-stop-instance.yaml").exists()
         assert (target / "policies" / "default.yaml").exists()
         assert (target / "inventory.yaml").exists()
+
+    def test_init_generates_signing_key(self, tmp_path: Path):
+        target = tmp_path / "keytest"
+        target.mkdir()
+        runner().invoke(cli, ["init", str(target)])
+        import yaml
+
+        data = yaml.safe_load(
+            (target / "agent-safe.yaml").read_text(encoding="utf-8")
+        )
+        assert "signing_key" in data
+        assert len(data["signing_key"]) == 64
 
     def test_init_validates_after_scaffold(self, tmp_path: Path):
         target = tmp_path / "fresh"
@@ -316,6 +334,7 @@ class TestInitCommand:
     def test_init_skips_existing(self, tmp_path: Path):
         target = tmp_path / "existing"
         target.mkdir()
+        (target / "agent-safe.yaml").write_text("registry: ./actions\n", encoding="utf-8")
         (target / "actions").mkdir()
         (target / "policies").mkdir()
         (target / "inventory.yaml").write_text("targets: []", encoding="utf-8")
@@ -329,6 +348,7 @@ class TestInitCommand:
         result = runner().invoke(cli, ["init"])
         assert result.exit_code == 0
         assert (tmp_path / "actions").exists()
+        assert (tmp_path / "agent-safe.yaml").exists()
 
     def test_init_scaffold_loads_as_agentsafe(self, tmp_path: Path):
         """The scaffolded project can be used with the SDK."""
@@ -340,6 +360,7 @@ class TestInitCommand:
             registry=target / "actions",
             policies=target / "policies",
             inventory=target / "inventory.yaml",
+            auto_discover=False,
         )
         decision = safe.check(
             action="restart-deployment",
@@ -348,6 +369,22 @@ class TestInitCommand:
         )
         assert decision.result == DecisionResult.ALLOW
         assert decision.policy_matched == "allow-dev-all"
+
+    def test_init_scaffold_zero_config_sdk(self, tmp_path: Path, monkeypatch):
+        """The scaffolded project works with AgentSafe() zero-config."""
+        target = tmp_path / "zeroconf"
+        target.mkdir()
+        runner().invoke(cli, ["init", str(target)])
+        monkeypatch.chdir(target)
+
+        safe = AgentSafe()
+        assert len(safe.list_actions()) == 5
+        decision = safe.check(
+            action="get-pod-logs",
+            target="dev/test-app",
+            params={"namespace": "dev", "pod": "test"},
+        )
+        assert decision.result == DecisionResult.ALLOW
 
 
 # --- Malformed YAML edge cases ---

@@ -23,6 +23,7 @@ import click
 
 from agent_safe import __version__
 from agent_safe.audit.logger import AuditLogger, verify_log
+from agent_safe.config import AgentSafeConfig, load_config
 from agent_safe.inventory.loader import InventoryError, load_inventory
 from agent_safe.models import DecisionResult
 from agent_safe.pdp.engine import PDPError, load_policies
@@ -38,6 +39,19 @@ DEFAULT_INVENTORY = "./inventory.yaml"
 DEFAULT_AUDIT_LOG = "./audit.jsonl"
 
 
+def _resolve_cfg() -> AgentSafeConfig:
+    """Load config from agent-safe.yaml (auto-discover, never error)."""
+    try:
+        return load_config()
+    except Exception:
+        return AgentSafeConfig()
+
+
+def _or(explicit: str | None, cfg_val: str | None, fallback: str) -> str:
+    """Return first non-None value: explicit CLI flag > config > fallback."""
+    return explicit or cfg_val or fallback
+
+
 # --- Root group ---
 
 
@@ -50,7 +64,37 @@ def cli() -> None:
 # --- init command ---
 
 
-_INIT_ACTION = """\
+_INIT_ACTIONS: dict[str, str] = {
+    "get-pod-logs.yaml": """\
+name: get-pod-logs
+version: "1.0.0"
+description: >
+  Fetch logs from a Kubernetes pod. Read-only operation.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace
+  - name: pod
+    type: string
+    required: true
+    description: Pod name
+  - name: lines
+    type: integer
+    required: false
+    description: Number of log lines (default 100)
+    default_value: 100
+
+risk_class: low
+target_types:
+  - k8s-deployment
+reversible: true
+tags:
+  - kubernetes
+  - observability
+""",
+    "restart-deployment.yaml": """\
 name: restart-deployment
 version: "1.0.0"
 description: Restart a Kubernetes deployment by triggering a rolling update.
@@ -68,11 +112,115 @@ parameters:
 risk_class: medium
 target_types:
   - k8s-deployment
-reversible: true
+reversible: false
 tags:
   - kubernetes
   - deployment
-"""
+""",
+    "scale-deployment.yaml": """\
+name: scale-deployment
+version: "1.0.0"
+description: >
+  Scale a Kubernetes deployment to a target replica count.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace
+  - name: deployment
+    type: string
+    required: true
+    description: Deployment name
+  - name: replicas
+    type: integer
+    required: true
+    description: Target replica count
+    min_value: 0
+    max_value: 100
+
+risk_class: medium
+target_types:
+  - k8s-deployment
+reversible: true
+rollback_action: scale-deployment
+rollback_params:
+  namespace:
+    source: params.namespace
+  deployment:
+    source: params.deployment
+  replicas:
+    source: before_state.replicas
+state_fields:
+  - name: replicas
+    type: integer
+tags:
+  - kubernetes
+  - deployment
+""",
+    "update-image.yaml": """\
+name: update-image
+version: "1.0.0"
+description: >
+  Update a Kubernetes deployment's container image. High-risk
+  because a bad image can cause an outage.
+
+parameters:
+  - name: namespace
+    type: string
+    required: true
+    description: Kubernetes namespace
+  - name: deployment
+    type: string
+    required: true
+    description: Deployment name
+  - name: image
+    type: string
+    required: true
+    description: "New container image (e.g. myapp:v2.1.0)"
+
+risk_class: high
+target_types:
+  - k8s-deployment
+reversible: true
+rollback_action: update-image
+rollback_params:
+  namespace:
+    source: params.namespace
+  deployment:
+    source: params.deployment
+  image:
+    source: before_state.image
+state_fields:
+  - name: image
+    type: string
+tags:
+  - kubernetes
+  - deployment
+""",
+    "ec2-stop-instance.yaml": """\
+name: ec2-stop-instance
+version: "1.0.0"
+description: >
+  Stop an EC2 instance gracefully. The instance can be
+  restarted later with ec2-start-instance.
+
+parameters:
+  - name: instance_id
+    type: string
+    required: true
+    description: EC2 instance ID (i-...)
+
+risk_class: high
+target_types:
+  - ec2-instance
+reversible: true
+rollback_action: ec2-start-instance
+tags:
+  - aws
+  - ec2
+""",
+}
 
 _INIT_POLICY = """\
 # Agent-Safe policies — evaluated by priority (highest first), first match wins.
@@ -127,52 +275,136 @@ targets:
     type: k8s-deployment
     environment: dev
     sensitivity: public
+
+  - id: prod/web-instance
+    type: ec2-instance
+    environment: prod
+    sensitivity: critical
+    owner: infra-team
 """
+
+_INIT_GITIGNORE = """\
+# Agent-Safe — secrets and runtime files
+agent-safe.yaml
+audit.jsonl
+approvals.jsonl
+*.log
+"""
+
+
+def _risk_badge(risk: str) -> str:
+    """Return a coloured risk badge for CLI output."""
+    color = {
+        "low": "green", "medium": "yellow",
+        "high": "red", "critical": "magenta",
+    }.get(risk, "white")
+    return click.style(f"[{risk}]", fg=color)
 
 
 @cli.command()
 @click.argument("directory", default=".")
 def init(directory: str) -> None:
     """Scaffold a new Agent-Safe project with example config."""
-    root = Path(directory)
+    from agent_safe.config import generate_signing_key
 
-    actions_dir = root / "actions"
-    policies_dir = root / "policies"
-    inventory_file = root / "inventory.yaml"
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
 
     created: list[str] = []
+    skipped: list[str] = []
 
+    # --- agent-safe.yaml ---
+    config_file = root / "agent-safe.yaml"
+    if not config_file.exists():
+        key = generate_signing_key()
+        config_file.write_text(
+            f"# Agent-Safe project configuration\n"
+            f"# Docs: https://github.com/sahb4k/agent-safe\n"
+            f"\n"
+            f"# Paths (relative to this file)\n"
+            f"registry: ./actions\n"
+            f"policies: ./policies\n"
+            f"inventory: ./inventory.yaml\n"
+            f"audit_log: ./audit.jsonl\n"
+            f"\n"
+            f"# HMAC signing key for execution tickets and identity tokens.\n"
+            f"# WARNING: Keep this secret! Do not commit to version control.\n"
+            f"signing_key: \"{key}\"\n",
+            encoding="utf-8",
+        )
+        created.append("agent-safe.yaml")
+    else:
+        skipped.append("agent-safe.yaml")
+
+    # --- .gitignore ---
+    gitignore = root / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(_INIT_GITIGNORE, encoding="utf-8")
+        created.append(".gitignore")
+    else:
+        skipped.append(".gitignore")
+
+    # --- actions/ ---
+    actions_dir = root / "actions"
     if not actions_dir.exists():
         actions_dir.mkdir(parents=True)
-        (actions_dir / "restart-deployment.yaml").write_text(
-            _INIT_ACTION, encoding="utf-8"
-        )
-        created.append("actions/restart-deployment.yaml")
+        for filename, content in _INIT_ACTIONS.items():
+            (actions_dir / filename).write_text(content, encoding="utf-8")
+            created.append(f"actions/{filename}")
     else:
-        click.echo("  skip  actions/ (already exists)")
+        skipped.append("actions/")
 
+    # --- policies/ ---
+    policies_dir = root / "policies"
     if not policies_dir.exists():
         policies_dir.mkdir(parents=True)
         (policies_dir / "default.yaml").write_text(
-            _INIT_POLICY, encoding="utf-8"
+            _INIT_POLICY, encoding="utf-8",
         )
         created.append("policies/default.yaml")
     else:
-        click.echo("  skip  policies/ (already exists)")
+        skipped.append("policies/")
 
+    # --- inventory.yaml ---
+    inventory_file = root / "inventory.yaml"
     if not inventory_file.exists():
         inventory_file.write_text(_INIT_INVENTORY, encoding="utf-8")
         created.append("inventory.yaml")
     else:
-        click.echo("  skip  inventory.yaml (already exists)")
+        skipped.append("inventory.yaml")
+
+    # --- Output ---
+    if created:
+        click.echo(click.style("Created:", fg="green", bold=True))
+        risk_map = {
+            "get-pod-logs.yaml": "low",
+            "restart-deployment.yaml": "medium",
+            "scale-deployment.yaml": "medium",
+            "update-image.yaml": "high",
+            "ec2-stop-instance.yaml": "high",
+        }
+        for f in created:
+            badge = ""
+            basename = f.split("/")[-1] if "/" in f else ""
+            if basename in risk_map:
+                badge = "  " + _risk_badge(risk_map[basename])
+            click.echo(f"  + {f}{badge}")
+
+    for s in skipped:
+        click.echo(f"  skip  {s} (already exists)")
 
     if created:
-        click.echo(click.style("Created:", fg="green"))
-        for f in created:
-            click.echo(f"  + {f}")
-        click.echo(f"\nRun: agent-safe validate --registry {actions_dir} "
-                    f"--policies {policies_dir} --inventory {inventory_file}")
-    else:
+        click.echo(
+            "\n" + click.style("Next steps:", bold=True)
+        )
+        click.echo("  agent-safe validate")
+        click.echo("  agent-safe list-actions")
+        click.echo(
+            "  agent-safe check restart-deployment"
+            " --target dev/test-app --caller my-agent"
+            ' --params \'{"namespace":"dev","deployment":"app"}\''
+        )
+    elif not skipped:
         click.echo("Nothing to create — all files already exist.")
 
 
@@ -182,28 +414,33 @@ def init(directory: str) -> None:
 @cli.command("test")
 @click.argument("test_path")
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--inventory", default=DEFAULT_INVENTORY,
+    "--inventory", default=None,
     help="Path to inventory YAML file",
 )
 def test_policies(
     test_path: str,
-    registry: str,
-    policies: str,
-    inventory: str,
+    registry: str | None,
+    policies: str | None,
+    inventory: str | None,
 ) -> None:
     """Run policy test cases against the current configuration.
 
     TEST_PATH is a YAML file or directory of YAML files containing test cases.
     Each test declares an action/target/caller/params and the expected decision.
     """
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    inventory = _or(inventory, cfg.inventory, DEFAULT_INVENTORY)
+
     # Load test cases
     try:
         cases = load_test_files(Path(test_path))
@@ -218,6 +455,7 @@ def test_policies(
             registry=registry,
             policies=policies,
             inventory=inv_path,
+            auto_discover=False,
         )
     except Exception as e:
         click.echo(f"Error loading config: {e}", err=True)
@@ -268,19 +506,19 @@ def test_policies(
     help="Action parameters as JSON string",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--inventory", default=DEFAULT_INVENTORY,
+    "--inventory", default=None,
     help="Path to inventory YAML file",
 )
 @click.option(
-    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    "--audit-log", default=None,
     help="Path to audit log file",
 )
 @click.option("--json-output", is_flag=True, help="Output as JSON")
@@ -301,16 +539,23 @@ def check(
     target: str | None,
     caller: str | None,
     params: str | None,
-    registry: str,
-    policies: str,
-    inventory: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    inventory: str | None,
+    audit_log: str | None,
     json_output: bool,
     signing_key: str | None,
     approval_store: str | None,
     ticket_id: str | None,
 ) -> None:
     """Evaluate a policy decision for an action."""
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    inventory = _or(inventory, cfg.inventory, DEFAULT_INVENTORY)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
+    signing_key = signing_key or cfg.signing_key
+
     parsed_params: dict[str, Any] | None = None
     if params is not None:
         try:
@@ -329,6 +574,7 @@ def check(
             audit_log=audit_log,
             signing_key=signing_key,
             approval_store=approval_store,
+            auto_discover=False,
         )
     except Exception as e:
         click.echo(f"Error loading config: {e}", err=True)
@@ -389,19 +635,21 @@ def check(
 
 @cli.command("list-actions")
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option("--tag", default=None, help="Filter by tag")
 @click.option("--risk", default=None, help="Filter by risk class")
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def list_actions(
-    registry: str,
+    registry: str | None,
     tag: str | None,
     risk: str | None,
     json_output: bool,
 ) -> None:
     """Show all registered actions."""
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
     try:
         reg = load_registry(registry)
     except RegistryError as e:
@@ -441,11 +689,11 @@ def list_actions(
 
 @cli.command()
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
@@ -458,6 +706,11 @@ def validate(
     inventory: str | None,
 ) -> None:
     """Validate configuration files."""
+    cfg = _resolve_cfg()
+    registry = registry or cfg.registry or DEFAULT_REGISTRY
+    policies = policies or cfg.policies or DEFAULT_POLICIES
+    inventory = inventory or cfg.inventory
+
     errors: list[str] = []
     ok_count = 0
 
@@ -785,7 +1038,7 @@ def ticket() -> None:
 @ticket.command("verify")
 @click.argument("token")
 @click.option(
-    "--signing-key", required=True,
+    "--signing-key", default=None,
     help="HMAC signing key used to issue the ticket",
 )
 @click.option("--action", "expected_action", default=None, help="Expected action (optional)")
@@ -794,13 +1047,18 @@ def ticket() -> None:
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def ticket_verify(
     token: str,
-    signing_key: str,
+    signing_key: str | None,
     expected_action: str | None,
     expected_target: str | None,
     issuer: str,
     json_output: bool,
 ) -> None:
     """Verify a signed execution ticket."""
+    signing_key = signing_key or _resolve_cfg().signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+
     from agent_safe.tickets.validator import TicketValidator
 
     validator = TicketValidator(signing_key=signing_key, issuer=issuer)
@@ -947,15 +1205,15 @@ def approval_show(
     help="Path to approval store file",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    "--audit-log", default=None,
     help="Path to audit log file",
 )
 @click.option("--signing-key", default=None, help="HMAC signing key")
@@ -964,12 +1222,17 @@ def approval_approve(
     resolved_by: str,
     reason: str | None,
     store: str,
-    registry: str,
-    policies: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    audit_log: str | None,
     signing_key: str | None,
 ) -> None:
     """Approve a pending approval request."""
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
+    signing_key = signing_key or cfg.signing_key
     _resolve_approval_cli(
         request_id, "approve", resolved_by, reason,
         store, registry, policies, audit_log, signing_key,
@@ -985,15 +1248,15 @@ def approval_approve(
     help="Path to approval store file",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    "--audit-log", default=None,
     help="Path to audit log file",
 )
 def approval_deny(
@@ -1001,11 +1264,15 @@ def approval_deny(
     resolved_by: str,
     reason: str | None,
     store: str,
-    registry: str,
-    policies: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    audit_log: str | None,
 ) -> None:
     """Deny a pending approval request."""
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
     _resolve_approval_cli(
         request_id, "deny", resolved_by, reason,
         store, registry, policies, audit_log, None,
@@ -1031,6 +1298,7 @@ def _resolve_approval_cli(
             audit_log=audit_log,
             approval_store=store,
             signing_key=signing_key,
+            auto_discover=False,
         )
     except Exception as e:
         click.echo(f"Error loading config: {e}", err=True)
@@ -1072,11 +1340,11 @@ def credential() -> None:
 @credential.command("resolve")
 @click.argument("token")
 @click.option(
-    "--signing-key", required=True,
+    "--signing-key", default=None,
     help="HMAC signing key used to issue the ticket",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
@@ -1086,8 +1354,8 @@ def credential() -> None:
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def credential_resolve(
     token: str,
-    signing_key: str,
-    registry: str,
+    signing_key: str | None,
+    registry: str | None,
     vault_cred: tuple[str, ...],
     json_output: bool,
 ) -> None:
@@ -1096,6 +1364,13 @@ def credential_resolve(
     Takes a signed ticket token, validates it, looks up the action's
     credential scope, and fetches credentials from the vault.
     """
+    cfg = _resolve_cfg()
+    signing_key = signing_key or cfg.signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+
     from agent_safe.tickets.validator import TicketValidator
 
     validator = TicketValidator(signing_key=signing_key)
@@ -1211,7 +1486,7 @@ def delegation() -> None:
 @click.option("--groups", default=None, help="Comma-separated groups to delegate")
 @click.option("--ttl", default=None, type=int, help="Token TTL in seconds")
 @click.option("--max-depth", default=5, type=int, help="Max delegation depth")
-@click.option("--signing-key", required=True, help="HMAC signing key")
+@click.option("--signing-key", default=None, help="HMAC signing key")
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def delegation_create(
     parent_token: str,
@@ -1221,10 +1496,15 @@ def delegation_create(
     groups: str | None,
     ttl: int | None,
     max_depth: int,
-    signing_key: str,
+    signing_key: str | None,
     json_output: bool,
 ) -> None:
     """Create a delegation token for a sub-agent."""
+    signing_key = signing_key or _resolve_cfg().signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+
     from datetime import timedelta
 
     from agent_safe.identity.manager import DelegationError, IdentityManager
@@ -1278,16 +1558,21 @@ def delegation_create(
 
 @delegation.command("verify")
 @click.argument("token")
-@click.option("--signing-key", required=True, help="HMAC signing key")
+@click.option("--signing-key", default=None, help="HMAC signing key")
 @click.option("--issuer", default="agent-safe", help="Expected issuer")
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def delegation_verify(
     token: str,
-    signing_key: str,
+    signing_key: str | None,
     issuer: str,
     json_output: bool,
 ) -> None:
     """Verify a delegation token and display the chain."""
+    signing_key = signing_key or _resolve_cfg().signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+
     from agent_safe.identity.manager import IdentityManager
 
     mgr = IdentityManager(signing_key, issuer=issuer)
@@ -1357,32 +1642,38 @@ def rollback() -> None:
 @rollback.command("show")
 @click.argument("audit_id")
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--inventory", default=DEFAULT_INVENTORY,
+    "--inventory", default=None,
     help="Path to inventory YAML file",
 )
 @click.option(
-    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    "--audit-log", default=None,
     help="Path to audit log file",
 )
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def rollback_show(
     audit_id: str,
-    registry: str,
-    policies: str,
-    inventory: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    inventory: str | None,
+    audit_log: str | None,
     json_output: bool,
 ) -> None:
     """Show the rollback plan for a previous action."""
     from agent_safe.sdk.client import AgentSafeError
+
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    inventory = _or(inventory, cfg.inventory, DEFAULT_INVENTORY)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
 
     inv_path: str | None = inventory if Path(inventory).exists() else None
 
@@ -1392,6 +1683,7 @@ def rollback_show(
             policies=policies,
             inventory=inv_path,
             audit_log=audit_log,
+            auto_discover=False,
         )
     except Exception as e:
         click.echo(f"Error loading config: {e}", err=True)
@@ -1450,19 +1742,19 @@ def rollback_show(
 @click.argument("audit_id")
 @click.option("--caller", default=None, help="Override the rollback caller")
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
-    "--policies", default=DEFAULT_POLICIES,
+    "--policies", default=None,
     help="Path to policies directory",
 )
 @click.option(
-    "--inventory", default=DEFAULT_INVENTORY,
+    "--inventory", default=None,
     help="Path to inventory YAML file",
 )
 @click.option(
-    "--audit-log", default=DEFAULT_AUDIT_LOG,
+    "--audit-log", default=None,
     help="Path to audit log file",
 )
 @click.option(
@@ -1473,15 +1765,22 @@ def rollback_show(
 def rollback_check(
     audit_id: str,
     caller: str | None,
-    registry: str,
-    policies: str,
-    inventory: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    inventory: str | None,
+    audit_log: str | None,
     signing_key: str | None,
     json_output: bool,
 ) -> None:
     """Generate rollback plan and evaluate through PDP."""
     from agent_safe.sdk.client import AgentSafeError
+
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    inventory = _or(inventory, cfg.inventory, DEFAULT_INVENTORY)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
+    signing_key = signing_key or cfg.signing_key
 
     inv_path: str | None = inventory if Path(inventory).exists() else None
 
@@ -1492,6 +1791,7 @@ def rollback_check(
             inventory=inv_path,
             audit_log=audit_log,
             signing_key=signing_key,
+            auto_discover=False,
         )
     except Exception as e:
         click.echo(f"Error loading config: {e}", err=True)
@@ -1562,11 +1862,11 @@ def runner() -> None:
 @runner.command("execute")
 @click.argument("token")
 @click.option(
-    "--signing-key", required=True,
+    "--signing-key", default=None,
     help="HMAC signing key used to issue the ticket",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option(
@@ -1591,8 +1891,8 @@ def runner() -> None:
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def runner_execute(
     token: str,
-    signing_key: str,
-    registry: str,
+    signing_key: str | None,
+    registry: str | None,
     executor_type: str,
     kubectl_path: str,
     kubeconfig: str | None,
@@ -1605,6 +1905,13 @@ def runner_execute(
     json_output: bool,
 ) -> None:
     """Execute a governed action by validating a ticket."""
+    cfg = _resolve_cfg()
+    signing_key = signing_key or cfg.signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+
     from agent_safe.runner.executor import DryRunExecutor, Executor
     from agent_safe.runner.runner import Runner
     from agent_safe.tickets.validator import TicketValidator
@@ -1696,21 +2003,28 @@ def runner_execute(
 @runner.command("dry-run")
 @click.argument("token")
 @click.option(
-    "--signing-key", required=True,
+    "--signing-key", default=None,
     help="HMAC signing key used to issue the ticket",
 )
 @click.option(
-    "--registry", default=DEFAULT_REGISTRY,
+    "--registry", default=None,
     help="Path to actions directory",
 )
 @click.option("--json-output", is_flag=True, help="Output as JSON")
 def runner_dry_run(
     token: str,
-    signing_key: str,
-    registry: str,
+    signing_key: str | None,
+    registry: str | None,
     json_output: bool,
 ) -> None:
     """Show what would happen without executing."""
+    cfg = _resolve_cfg()
+    signing_key = signing_key or cfg.signing_key
+    if signing_key is None:
+        click.echo("Error: --signing-key is required (or set in agent-safe.yaml)", err=True)
+        sys.exit(1)
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+
     from agent_safe.runner.runner import Runner
     from agent_safe.tickets.validator import TicketValidator
 
@@ -1760,20 +2074,26 @@ def runner_dry_run(
 @click.option("--host", default="127.0.0.1", help="Bind address")
 @click.option("--port", default=8420, type=int, help="Port number")
 @click.option("--dev", is_flag=True, help="Enable CORS for frontend dev server")
-@click.option("--registry", default=DEFAULT_REGISTRY, help="Path to actions directory")
-@click.option("--policies", default=DEFAULT_POLICIES, help="Path to policies directory")
-@click.option("--inventory", default=DEFAULT_INVENTORY, help="Path to inventory file")
-@click.option("--audit-log", default=DEFAULT_AUDIT_LOG, help="Path to audit log")
+@click.option("--registry", default=None, help="Path to actions directory")
+@click.option("--policies", default=None, help="Path to policies directory")
+@click.option("--inventory", default=None, help="Path to inventory file")
+@click.option("--audit-log", default=None, help="Path to audit log")
 def dashboard(
     host: str,
     port: int,
     dev: bool,
-    registry: str,
-    policies: str,
-    inventory: str,
-    audit_log: str,
+    registry: str | None,
+    policies: str | None,
+    inventory: str | None,
+    audit_log: str | None,
 ) -> None:
     """Launch the governance dashboard web UI."""
+    cfg = _resolve_cfg()
+    registry = _or(registry, cfg.registry, DEFAULT_REGISTRY)
+    policies = _or(policies, cfg.policies, DEFAULT_POLICIES)
+    inventory = _or(inventory, cfg.inventory, DEFAULT_INVENTORY)
+    audit_log = _or(audit_log, cfg.audit_log, DEFAULT_AUDIT_LOG)
+
     try:
         import uvicorn  # noqa: F811
     except ImportError:

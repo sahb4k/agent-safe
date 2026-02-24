@@ -5,6 +5,7 @@ __version__ = "0.11.0"
 # Optional executor imports (don't crash if optional deps are missing)
 import contextlib
 
+from agent_safe.config import AgentSafeConfig, find_config, generate_signing_key, load_config
 from agent_safe.credentials.env_vault import EnvVarVault
 from agent_safe.credentials.resolver import CredentialResolver
 from agent_safe.credentials.vault import CredentialVault, CredentialVaultError
@@ -39,6 +40,7 @@ with contextlib.suppress(ImportError):
 
 __all__ = [
     "AgentSafe",
+    "AgentSafeConfig",
     "AgentSafeError",
     "ApprovalRequest",
     "ApprovalStatus",
@@ -57,7 +59,10 @@ __all__ = [
     "ExecutionStatus",
     "ExecutionTicket",
     "Executor",
+    "find_config",
+    "generate_signing_key",
     "K8sExecutor",
+    "load_config",
     "PreCheckResult",
     "RollbackPlan",
     "Runner",
