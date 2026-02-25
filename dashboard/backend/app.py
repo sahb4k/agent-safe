@@ -82,6 +82,13 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     else:
         init_auth(None, "free")  # type: ignore[arg-type]
 
+    # --- Managed Policy Service (paid tier, requires DB) ---
+    managed_policy_svc = None
+    if is_paid and has_feature(config.tier, "policies") and config.signing_key:
+        from dashboard.backend.managed_policies.service import ManagedPolicyService
+
+        managed_policy_svc = ManagedPolicyService(db)
+
     # --- Core Services ---
     audit_svc = AuditService(config)
     action_svc = ActionService(config)
@@ -91,7 +98,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     # --- Core Routers ---
     audit.init_router(audit_svc)
     actions.init_router(action_svc)
-    policies.init_router(policy_svc)
+    policies.init_router(policy_svc, managed_service=managed_policy_svc, tier=config.tier)
     activity.init_router(activity_svc)
     health.init_router(audit_svc, action_svc, policy_svc)
 
@@ -123,7 +130,9 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         from dashboard.backend.clusters.service import ClusterService
 
         cluster_svc = ClusterService(db)
-        clusters_router.init_router(cluster_svc, config.tier)
+        clusters_router.init_router(
+            cluster_svc, config.tier, managed_policy_svc=managed_policy_svc,
+        )
         app.include_router(clusters_router.router)
 
     # --- Static files (built frontend) ---

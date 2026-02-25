@@ -69,6 +69,45 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON cluster_events(timestamp);
         """,
     ),
+    (
+        3,
+        """
+        CREATE TABLE IF NOT EXISTS managed_policies (
+            policy_id     TEXT PRIMARY KEY,
+            name          TEXT UNIQUE NOT NULL,
+            description   TEXT NOT NULL DEFAULT '',
+            priority      INTEGER NOT NULL DEFAULT 0,
+            decision      TEXT NOT NULL,
+            reason        TEXT NOT NULL DEFAULT '',
+            match_json    TEXT NOT NULL DEFAULT '{}',
+            is_active     INTEGER NOT NULL DEFAULT 1,
+            created_by    TEXT NOT NULL DEFAULT '',
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS policy_revisions (
+            revision_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_json   TEXT NOT NULL,
+            rule_count    INTEGER NOT NULL DEFAULT 0,
+            published_by  TEXT NOT NULL DEFAULT '',
+            published_at  TEXT NOT NULL,
+            notes         TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS cluster_policy_status (
+            cluster_id    TEXT NOT NULL REFERENCES clusters(cluster_id),
+            revision_id   INTEGER NOT NULL REFERENCES policy_revisions(revision_id),
+            synced_at     TEXT NOT NULL,
+            PRIMARY KEY (cluster_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_managed_policies_active
+            ON managed_policies(is_active);
+        CREATE INDEX IF NOT EXISTS idx_policy_revisions_published
+            ON policy_revisions(published_at);
+        """,
+    ),
 ]
 
 

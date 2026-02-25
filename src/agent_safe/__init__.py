@@ -1,6 +1,6 @@
 """Agent-Safe: A governance and policy enforcement layer for AI agents."""
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 # Optional executor imports (don't crash if optional deps are missing)
 import contextlib
@@ -31,6 +31,7 @@ from agent_safe.runner.executor import DryRunExecutor, Executor
 from agent_safe.runner.runner import Runner, RunnerError
 from agent_safe.runner.subprocess_executor import SubprocessExecutor
 from agent_safe.sdk.client import AgentSafe, AgentSafeError
+from agent_safe.sync.policy_sync import PolicySyncClient
 from agent_safe.tickets.validator import TicketValidator
 
 with contextlib.suppress(ImportError):
@@ -65,6 +66,7 @@ __all__ = [
     "generate_signing_key",
     "K8sExecutor",
     "load_config",
+    "PolicySyncClient",
     "PreCheckResult",
     "RollbackPlan",
     "Runner",

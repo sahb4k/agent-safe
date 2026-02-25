@@ -48,3 +48,18 @@ export async function postApi<T>(
     body: JSON.stringify(body),
   })
 }
+
+export async function putApi<T>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  return fetchApi<T>(path, undefined, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteApi<T>(path: string): Promise<T> {
+  return fetchApi<T>(path, undefined, { method: 'DELETE' })
+}

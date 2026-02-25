@@ -17,17 +17,25 @@ from dashboard.backend.clusters.models import (
     IngestResponse,
 )
 from dashboard.backend.clusters.service import ClusterService
+from dashboard.backend.managed_policies.models import PolicyBundleResponse
+from dashboard.backend.managed_policies.service import ManagedPolicyService
 from dashboard.backend.schemas import AuditStatsResponse, PaginatedResponse
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 _service: ClusterService | None = None
+_managed_policy_service: ManagedPolicyService | None = None
 _tier: str = "free"
 
 
-def init_router(service: ClusterService, tier: str) -> None:
-    global _service, _tier  # noqa: PLW0603
+def init_router(
+    service: ClusterService,
+    tier: str,
+    managed_policy_svc: ManagedPolicyService | None = None,
+) -> None:
+    global _service, _managed_policy_service, _tier  # noqa: PLW0603
     _service = service
+    _managed_policy_service = managed_policy_svc
     _tier = tier
 
 
@@ -110,6 +118,40 @@ def get_all_cluster_stats(
     """Aggregated stats from all clusters."""
     _check_feature()
     return _svc().get_cluster_stats()
+
+
+# ------------------------------------------------------------------
+# Policy Bundle Pull (API key auth, NOT JWT)
+# Must be defined BEFORE /{cluster_id} to avoid path parameter clash.
+# ------------------------------------------------------------------
+
+
+@router.get("/policy-bundle", response_model=PolicyBundleResponse)
+def pull_policy_bundle(
+    request: Request,
+    revision: int | None = Query(None, description="Specific revision ID to pull"),
+) -> PolicyBundleResponse:
+    """Pull the latest (or specific) policy bundle.
+
+    Authentication is via API key (Bearer token), same as /ingest.
+    Records the cluster's sync status on successful pull.
+    """
+    api_key = _extract_bearer_token(request)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    cluster_id = _svc().validate_api_key(api_key)
+    if not cluster_id:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if _managed_policy_service is None:
+        raise HTTPException(status_code=404, detail="Policy management not available")
+
+    bundle = _managed_policy_service.get_bundle(revision)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="No published revision")
+
+    _managed_policy_service.record_cluster_sync(cluster_id, bundle.revision_id)
+    return bundle
 
 
 @router.get("/{cluster_id}", response_model=ClusterInfo)

@@ -110,13 +110,13 @@ class TestMigrationV2:
         )
         assert len(rows) == 1
 
-    def test_schema_version_is_2(self, db: Database) -> None:
-        assert get_schema_version(db) == 2
+    def test_schema_version_is_3(self, db: Database) -> None:
+        assert get_schema_version(db) == 3
 
     def test_migration_idempotent(self, db: Database) -> None:
         run_migrations(db)
         run_migrations(db)
-        assert get_schema_version(db) == 2
+        assert get_schema_version(db) == 3
 
 
 # ------------------------------------------------------------------

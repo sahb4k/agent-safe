@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { fetchApi, postApi } from './client'
+import { fetchApi, postApi, putApi, deleteApi } from './client'
 
 // --- Types ---
 
@@ -291,5 +291,112 @@ export function useClusterStats(clusterId?: string) {
 export function useRegisterCluster() {
   return useMutation<ClusterCreateResponse, Error, { name: string; description?: string }>({
     mutationFn: (body) => postApi('/clusters/', body),
+  })
+}
+
+// --- Managed Policies ---
+
+export interface MatchTargets {
+  environments?: string[] | null
+  sensitivities?: string[] | null
+  types?: string[] | null
+  labels?: Record<string, string> | null
+}
+
+export interface MatchCallers {
+  agent_ids?: string[] | null
+  roles?: string[] | null
+  groups?: string[] | null
+}
+
+export interface MatchConditions {
+  actions: string[]
+  targets?: MatchTargets | null
+  callers?: MatchCallers | null
+  risk_classes?: string[] | null
+  require_ticket?: boolean | null
+}
+
+export interface ManagedPolicy {
+  policy_id: string
+  name: string
+  description: string
+  priority: number
+  decision: string
+  reason: string
+  match: MatchConditions
+  is_active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ManagedPolicyCreateRequest {
+  name: string
+  description?: string
+  priority?: number
+  decision: string
+  reason: string
+  match?: MatchConditions
+}
+
+export interface PolicyRevision {
+  revision_id: number
+  rule_count: number
+  published_by: string
+  published_at: string
+  notes: string
+}
+
+export interface ClusterSyncStatus {
+  cluster_id: string
+  cluster_name: string
+  revision_id: number | null
+  synced_at: string | null
+  is_current: boolean
+}
+
+export function useManagedPolicies() {
+  return useQuery<ManagedPolicy[]>({
+    queryKey: ['managed-policies'],
+    queryFn: () => fetchApi('/policies/managed'),
+  })
+}
+
+export function useCreateManagedPolicy() {
+  return useMutation<ManagedPolicy, Error, ManagedPolicyCreateRequest>({
+    mutationFn: (body) => postApi('/policies/managed', body),
+  })
+}
+
+export function useUpdateManagedPolicy() {
+  return useMutation<ManagedPolicy, Error, { id: string; body: Partial<ManagedPolicyCreateRequest> & { is_active?: boolean } }>({
+    mutationFn: ({ id, body }) => putApi(`/policies/managed/${id}`, body),
+  })
+}
+
+export function useDeleteManagedPolicy() {
+  return useMutation<{ ok: boolean }, Error, string>({
+    mutationFn: (id) => deleteApi(`/policies/managed/${id}`),
+  })
+}
+
+export function usePublishPolicies() {
+  return useMutation<{ revision: PolicyRevision; bundle_preview: Record<string, unknown>[] }, Error, { notes?: string }>({
+    mutationFn: (body) => postApi('/policies/publish', body),
+  })
+}
+
+export function usePolicyRevisions() {
+  return useQuery<PolicyRevision[]>({
+    queryKey: ['policy-revisions'],
+    queryFn: () => fetchApi('/policies/revisions'),
+  })
+}
+
+export function usePolicySyncStatus() {
+  return useQuery<ClusterSyncStatus[]>({
+    queryKey: ['policy-sync-status'],
+    queryFn: () => fetchApi('/policies/sync-status'),
   })
 }
