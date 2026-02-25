@@ -108,6 +108,60 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON policy_revisions(published_at);
         """,
     ),
+    (
+        4,
+        """
+        CREATE TABLE IF NOT EXISTS alert_rules (
+            rule_id          TEXT PRIMARY KEY,
+            name             TEXT UNIQUE NOT NULL,
+            description      TEXT NOT NULL DEFAULT '',
+            is_active        INTEGER NOT NULL DEFAULT 1,
+            conditions_json  TEXT NOT NULL DEFAULT '{}',
+            cluster_ids_json TEXT,
+            threshold        INTEGER NOT NULL DEFAULT 1,
+            window_seconds   INTEGER NOT NULL DEFAULT 0,
+            channels_json    TEXT NOT NULL DEFAULT '{}',
+            cooldown_seconds INTEGER NOT NULL DEFAULT 300,
+            created_by       TEXT NOT NULL DEFAULT '',
+            created_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS alert_history (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_id             TEXT NOT NULL REFERENCES alert_rules(rule_id),
+            rule_name           TEXT NOT NULL,
+            cluster_id          TEXT NOT NULL,
+            fired_at            TEXT NOT NULL,
+            trigger_event_ids   TEXT NOT NULL DEFAULT '[]',
+            conditions_snapshot TEXT NOT NULL DEFAULT '{}',
+            notification_status TEXT NOT NULL DEFAULT 'pending',
+            notification_error  TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_alert_rules_active
+            ON alert_rules(is_active);
+        CREATE INDEX IF NOT EXISTS idx_alert_history_rule
+            ON alert_history(rule_id);
+        CREATE INDEX IF NOT EXISTS idx_alert_history_fired
+            ON alert_history(fired_at);
+        CREATE INDEX IF NOT EXISTS idx_cluster_events_risk_decision_ts
+            ON cluster_events(cluster_id, risk_class, decision, timestamp);
+
+        ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'local';
+        ALTER TABLE users ADD COLUMN external_id TEXT;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_external_id
+            ON users(external_id) WHERE external_id IS NOT NULL;
+
+        CREATE TABLE IF NOT EXISTS oidc_auth_states (
+            state       TEXT PRIMARY KEY,
+            nonce       TEXT NOT NULL,
+            redirect_to TEXT NOT NULL DEFAULT '/',
+            created_at  TEXT NOT NULL,
+            expires_at  TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 

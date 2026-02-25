@@ -12,7 +12,11 @@ interface AuthState {
   token: string | null
   tier: string
   isLoading: boolean
+  ssoEnabled: boolean
+  passwordAuthEnabled: boolean
   login: (username: string, password: string) => Promise<void>
+  loginWithToken: (token: string, user: User) => void
+  startSSOLogin: () => Promise<void>
   logout: () => void
 }
 
@@ -30,13 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(TOKEN_KEY)
   )
   const [tier, setTier] = useState('free')
+  const [ssoEnabled, setSsoEnabled] = useState(false)
+  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     // Fetch tier info on mount
     fetch('/api/auth/tier')
-      .then(r => r.ok ? r.json() : { tier: 'free' })
-      .then(data => setTier(data.tier))
+      .then(r => r.ok ? r.json() : { tier: 'free', sso_enabled: false, password_auth_enabled: true })
+      .then(data => {
+        setTier(data.tier)
+        setSsoEnabled(data.sso_enabled ?? false)
+        setPasswordAuthEnabled(data.password_auth_enabled ?? true)
+      })
       .catch(() => setTier('free'))
       .finally(() => setIsLoading(false))
   }, [])
@@ -58,6 +68,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(USER_KEY, JSON.stringify(data.user))
   }
 
+  const loginWithToken = (newToken: string, newUser: User) => {
+    setToken(newToken)
+    setUser(newUser)
+    localStorage.setItem(TOKEN_KEY, newToken)
+    localStorage.setItem(USER_KEY, JSON.stringify(newUser))
+  }
+
+  const startSSOLogin = async () => {
+    const resp = await fetch('/api/auth/sso/authorize?redirect_to=/')
+    if (!resp.ok) throw new Error('Failed to start SSO login')
+    const data = await resp.json()
+    window.location.href = data.authorize_url
+  }
+
   const logout = () => {
     setToken(null)
     setUser(null)
@@ -66,7 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, tier, isLoading, login, logout }}>
+    <AuthContext.Provider value={{
+      user, token, tier, isLoading,
+      ssoEnabled, passwordAuthEnabled,
+      login, loginWithToken, startSSOLogin, logout,
+    }}>
       {children}
     </AuthContext.Provider>
   )

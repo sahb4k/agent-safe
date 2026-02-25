@@ -12,6 +12,7 @@ const coreNavItems = [
 
 const paidNavItems = [
   { to: '/clusters', label: 'Clusters' },
+  { to: '/alerts', label: 'Alerts' },
   { to: '/reports', label: 'Reports' },
 ]
 
@@ -72,7 +73,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               </button>
             </div>
           ) : (
-            <p className="text-xs text-gray-500">v0.15.0</p>
+            <p className="text-xs text-gray-500">v0.16.0</p>
           )}
         </div>
       </nav>

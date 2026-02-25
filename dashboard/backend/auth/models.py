@@ -26,6 +26,8 @@ class DashboardUser(BaseModel):
     is_active: bool = True
     created_at: datetime
     last_login: datetime | None = None
+    auth_provider: str = "local"
+    external_id: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -63,6 +65,14 @@ class UserUpdateRequest(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     new_password: str
+
+
+class SSOConfigInfo(BaseModel):
+    """Public SSO configuration info for the login page (no secrets)."""
+
+    oidc_enabled: bool
+    password_auth_enabled: bool
+    provider_name: str = ""
 
 
 class SessionClaims(BaseModel):

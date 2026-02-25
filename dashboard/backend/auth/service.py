@@ -230,12 +230,65 @@ class AuthService:
         except jwt.PyJWTError:
             return None
 
+    # --- SSO User Methods ---
+
+    def create_sso_user(
+        self,
+        external_id: str,
+        username: str,
+        display_name: str = "",
+        email: str = "",
+        role: str = "viewer",
+    ) -> DashboardUser:
+        """Create a user provisioned via SSO (no password)."""
+        if role not in [r.value for r in DashboardRole]:
+            raise ValueError(f"Invalid role: {role}")
+
+        user_id = f"usr-{uuid.uuid4().hex[:12]}"
+        now = datetime.now(UTC).isoformat()
+
+        self._db.write(
+            """INSERT INTO users
+               (user_id, username, display_name, email,
+                password_hash, salt, role, created_at,
+                auth_provider, external_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id, username, display_name, email,
+                "", "", role, now,
+                "oidc", external_id,
+            ),
+        )
+
+        return DashboardUser(
+            user_id=user_id,
+            username=username,
+            display_name=display_name,
+            email=email,
+            role=DashboardRole(role),
+            is_active=True,
+            created_at=datetime.fromisoformat(now),
+            auth_provider="oidc",
+            external_id=external_id,
+        )
+
+    def get_user_by_external_id(self, external_id: str) -> DashboardUser | None:
+        """Find a user by their SSO external ID."""
+        row = self._db.fetchone(
+            "SELECT * FROM users WHERE external_id = ? AND auth_provider = 'oidc'",
+            (external_id,),
+        )
+        return self._row_to_user(row) if row else None
+
     # --- Helpers ---
 
     @staticmethod
     def _row_to_user(row: dict | None) -> DashboardUser | None:
         if row is None:
             return None
+        keys = row.keys()
+        auth_provider = row["auth_provider"] if "auth_provider" in keys else "local"
+        external_id = row["external_id"] if "external_id" in keys else None
         return DashboardUser(
             user_id=row["user_id"],
             username=row["username"],
@@ -247,4 +300,6 @@ class AuthService:
             last_login=(
                 datetime.fromisoformat(row["last_login"]) if row["last_login"] else None
             ),
+            auth_provider=auth_provider,
+            external_id=external_id,
         )

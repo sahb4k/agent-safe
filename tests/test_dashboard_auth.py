@@ -290,7 +290,10 @@ class TestAuthAPI:
         client = _make_team_client()
         resp = client.get("/api/auth/tier")
         assert resp.status_code == 200
-        assert resp.json()["tier"] == "team"
+        data = resp.json()
+        assert data["tier"] == "team"
+        assert "sso_enabled" in data
+        assert "password_auth_enabled" in data
 
     def test_protected_endpoint_without_token(self) -> None:
         client = _make_team_client()
@@ -342,3 +345,95 @@ class TestUsersAPI:
             headers=headers,
         )
         assert resp.status_code == 409
+
+
+# --- SSO User Methods ---
+
+
+class TestSSOUserMethods:
+    def test_create_sso_user(self, auth_svc: AuthService) -> None:
+        user = auth_svc.create_sso_user(
+            external_id="oidc-sub-123",
+            username="alice",
+            display_name="Alice Smith",
+            email="alice@example.com",
+        )
+        assert user.user_id.startswith("usr-")
+        assert user.username == "alice"
+        assert user.auth_provider == "oidc"
+        assert user.external_id == "oidc-sub-123"
+
+    def test_get_user_by_external_id(self, auth_svc: AuthService) -> None:
+        created = auth_svc.create_sso_user(
+            external_id="oidc-sub-456",
+            username="bob",
+        )
+        found = auth_svc.get_user_by_external_id("oidc-sub-456")
+        assert found is not None
+        assert found.user_id == created.user_id
+        assert found.auth_provider == "oidc"
+
+    def test_get_user_by_external_id_not_found(self, auth_svc: AuthService) -> None:
+        assert auth_svc.get_user_by_external_id("nonexistent") is None
+
+    def test_sso_user_cannot_password_login(self, auth_svc: AuthService) -> None:
+        auth_svc.create_sso_user(
+            external_id="oidc-sub-789",
+            username="sso_user",
+        )
+        # SSO users have empty password hash — verify_password should fail
+        assert auth_svc.verify_password("sso_user", "") is None
+        assert auth_svc.verify_password("sso_user", "anything") is None
+
+    def test_sso_user_default_role(self, auth_svc: AuthService) -> None:
+        user = auth_svc.create_sso_user(
+            external_id="oidc-default",
+            username="default_user",
+        )
+        assert user.role == DashboardRole.VIEWER
+
+    def test_sso_user_custom_role(self, auth_svc: AuthService) -> None:
+        user = auth_svc.create_sso_user(
+            external_id="oidc-admin",
+            username="sso_admin",
+            role="admin",
+        )
+        assert user.role == DashboardRole.ADMIN
+
+    def test_regular_user_has_local_auth_provider(self, auth_svc: AuthService) -> None:
+        user = auth_svc.create_user("local_user", "password123")
+        assert user.auth_provider == "local"
+        assert user.external_id is None
+
+
+# --- Password Auth Disabled ---
+
+
+class TestPasswordAuthDisabled:
+    def test_login_rejected_when_password_auth_disabled(self) -> None:
+        from dashboard.backend.app import create_app
+        from dashboard.backend.config import DashboardConfig
+        from fastapi.testclient import TestClient
+
+        log_path = _write_audit_log()
+        config = DashboardConfig(
+            actions_dir=ACTIONS_DIR,
+            policies_dir=POLICIES_DIR,
+            inventory_file=INVENTORY_FILE,
+            audit_log=log_path,
+            tier="team",
+            signing_key=SIGNING_KEY,
+            admin_username="admin",
+            admin_password="adminpass",
+            db_path=tempfile.mktemp(suffix=".db"),
+            password_auth_enabled=False,
+        )
+        app = create_app(config)
+        client = TestClient(app)
+
+        resp = client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "adminpass"},
+        )
+        assert resp.status_code == 403
+        assert "disabled" in resp.json()["detail"].lower()

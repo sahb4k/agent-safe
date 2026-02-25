@@ -108,9 +108,54 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     app.include_router(activity.router)
     app.include_router(health.router)
 
+    # --- Alert Service + Engine (paid tier, requires DB) ---
+    alert_engine = None
+    if is_paid and has_feature(config.tier, "alerts") and config.signing_key:
+        from dashboard.backend.alerts.engine import AlertEngine
+        from dashboard.backend.alerts.service import AlertService
+        from dashboard.backend.routers import alerts as alerts_router
+
+        alert_svc = AlertService(db)
+        alert_engine = AlertEngine(alert_svc, db)
+
+        alerts_router.init_router(alert_svc, config.tier)
+        app.include_router(alerts_router.router)
+
+    # --- SSO Service (enterprise tier) ---
+    sso_enabled = False
+    if (
+        auth_svc is not None
+        and has_feature(config.tier, "sso")
+        and config.oidc_enabled
+        and config.oidc_provider_url
+        and config.oidc_client_id
+    ):
+        from dashboard.backend.auth.sso_service import SSOService
+        from dashboard.backend.routers import sso as sso_router
+
+        sso_svc = SSOService(
+            db=db,
+            auth_service=auth_svc,
+            provider_url=config.oidc_provider_url,
+            client_id=config.oidc_client_id,
+            client_secret=config.oidc_client_secret,
+            default_role=config.oidc_default_role,
+            scopes=config.oidc_scopes,
+        )
+        sso_router.init_router(
+            sso_svc, config.tier,
+            password_auth_enabled=config.password_auth_enabled,
+        )
+        app.include_router(sso_router.router)
+        sso_enabled = True
+
     # --- Auth Routers (paid tier only) ---
     if auth_svc is not None:
-        auth_router.init_router(auth_svc)
+        auth_router.init_router(
+            auth_svc,
+            password_auth_enabled=config.password_auth_enabled,
+            sso_enabled=sso_enabled,
+        )
         users_router.init_router(auth_svc, config.tier)
         app.include_router(auth_router.router)
         if has_feature(config.tier, "users"):
@@ -131,7 +176,9 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
 
         cluster_svc = ClusterService(db)
         clusters_router.init_router(
-            cluster_svc, config.tier, managed_policy_svc=managed_policy_svc,
+            cluster_svc, config.tier,
+            managed_policy_svc=managed_policy_svc,
+            alert_engine=alert_engine,
         )
         app.include_router(clusters_router.router)
 

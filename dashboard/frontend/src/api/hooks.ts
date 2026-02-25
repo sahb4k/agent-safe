@@ -400,3 +400,91 @@ export function usePolicySyncStatus() {
     queryFn: () => fetchApi('/policies/sync-status'),
   })
 }
+
+// --- Alert Rules ---
+
+export interface AlertConditions {
+  risk_classes?: string[] | null
+  decisions?: string[] | null
+  action_patterns?: string[] | null
+  event_types?: string[] | null
+}
+
+export interface AlertChannels {
+  webhook_url?: string | null
+  webhook_headers?: Record<string, string> | null
+  slack_webhook_url?: string | null
+  slack_channel?: string | null
+}
+
+export interface AlertRule {
+  rule_id: string
+  name: string
+  description: string
+  is_active: boolean
+  conditions: AlertConditions
+  cluster_ids: string[] | null
+  threshold: number
+  window_seconds: number
+  channels: AlertChannels
+  cooldown_seconds: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertRuleCreateRequest {
+  name: string
+  description?: string
+  conditions?: AlertConditions
+  cluster_ids?: string[] | null
+  threshold?: number
+  window_seconds?: number
+  channels: AlertChannels
+  cooldown_seconds?: number
+}
+
+export interface AlertHistoryItem {
+  id: number
+  rule_id: string
+  rule_name: string
+  cluster_id: string
+  fired_at: string
+  trigger_event_ids: string[]
+  conditions_snapshot: AlertConditions
+  notification_status: string
+  notification_error: string | null
+}
+
+export function useAlertRules() {
+  return useQuery<AlertRule[]>({
+    queryKey: ['alert-rules'],
+    queryFn: () => fetchApi('/alerts/rules'),
+  })
+}
+
+export function useCreateAlertRule() {
+  return useMutation<AlertRule, Error, AlertRuleCreateRequest>({
+    mutationFn: (body) => postApi('/alerts/rules', body),
+  })
+}
+
+export function useUpdateAlertRule() {
+  return useMutation<AlertRule, Error, { id: string; body: Partial<AlertRuleCreateRequest> & { is_active?: boolean } }>({
+    mutationFn: ({ id, body }) => putApi(`/alerts/rules/${id}`, body),
+  })
+}
+
+export function useDeleteAlertRule() {
+  return useMutation<{ ok: boolean }, Error, string>({
+    mutationFn: (id) => deleteApi(`/alerts/rules/${id}`),
+  })
+}
+
+export function useAlertHistory(params?: { limit?: string; rule_id?: string; cluster_id?: string }) {
+  return useQuery<AlertHistoryItem[]>({
+    queryKey: ['alert-history', params],
+    queryFn: () => fetchApi('/alerts/history', params as Record<string, string>),
+    refetchInterval: 15000,
+  })
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
 from dashboard.backend.auth.dependencies import require_admin, require_auth
 from dashboard.backend.auth.models import SessionClaims
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 _service: ClusterService | None = None
 _managed_policy_service: ManagedPolicyService | None = None
+_alert_engine: object | None = None  # AlertEngine, typed as object to avoid circular import
 _tier: str = "free"
 
 
@@ -32,10 +33,12 @@ def init_router(
     service: ClusterService,
     tier: str,
     managed_policy_svc: ManagedPolicyService | None = None,
+    alert_engine: object | None = None,
 ) -> None:
-    global _service, _managed_policy_service, _tier  # noqa: PLW0603
+    global _service, _managed_policy_service, _alert_engine, _tier  # noqa: PLW0603
     _service = service
     _managed_policy_service = managed_policy_svc
+    _alert_engine = alert_engine
     _tier = tier
 
 
@@ -224,6 +227,7 @@ def get_cluster_stats(
 def ingest_events(
     request: Request,
     body: IngestRequest,
+    background_tasks: BackgroundTasks,
 ) -> IngestResponse:
     """Receive audit events from a remote sidecar.
 
@@ -235,4 +239,12 @@ def ingest_events(
     cluster_id = _svc().validate_api_key(api_key)
     if not cluster_id:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    return _svc().ingest_events(cluster_id, body.events)
+    result = _svc().ingest_events(cluster_id, body.events)
+
+    # Fire-and-forget alert evaluation (does NOT block the response)
+    if _alert_engine is not None and result.accepted > 0:
+        background_tasks.add_task(
+            _alert_engine.evaluate_batch, cluster_id, body.events,  # type: ignore[union-attr]
+        )
+
+    return result

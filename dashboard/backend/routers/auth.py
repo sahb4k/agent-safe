@@ -13,11 +13,19 @@ from dashboard.backend.auth.service import AuthService
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _service: AuthService | None = None
+_password_auth_enabled: bool = True
+_sso_enabled: bool = False
 
 
-def init_router(service: AuthService) -> None:
-    global _service  # noqa: PLW0603
+def init_router(
+    service: AuthService,
+    password_auth_enabled: bool = True,
+    sso_enabled: bool = False,
+) -> None:
+    global _service, _password_auth_enabled, _sso_enabled  # noqa: PLW0603
     _service = service
+    _password_auth_enabled = password_auth_enabled
+    _sso_enabled = sso_enabled
 
 
 def _svc() -> AuthService:
@@ -27,6 +35,10 @@ def _svc() -> AuthService:
 
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest) -> LoginResponse:
+    if not _password_auth_enabled:
+        raise HTTPException(
+            status_code=403, detail="Password authentication is disabled",
+        )
     result = _svc().login(body.username, body.password)
     if result is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -51,7 +63,11 @@ def me(user: Annotated[SessionClaims, Depends(require_auth)]) -> UserInfo:
 
 @router.get("/tier")
 def tier_info() -> dict:
-    """Return the current tier (public, used by frontend to decide UI)."""
+    """Return the current tier and auth config (public, used by frontend)."""
     from dashboard.backend.auth.dependencies import _tier
 
-    return {"tier": _tier}
+    return {
+        "tier": _tier,
+        "sso_enabled": _sso_enabled,
+        "password_auth_enabled": _password_auth_enabled,
+    }

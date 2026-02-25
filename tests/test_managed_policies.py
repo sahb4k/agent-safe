@@ -97,8 +97,8 @@ def _make_free_client() -> TestClient:
 
 
 class TestMigrationV3:
-    def test_schema_version_is_3(self, db: Database) -> None:
-        assert get_schema_version(db) == 3
+    def test_schema_version_is_4(self, db: Database) -> None:
+        assert get_schema_version(db) == 4
 
     def test_managed_policies_table_exists(self, db: Database) -> None:
         row = db.fetchone(
