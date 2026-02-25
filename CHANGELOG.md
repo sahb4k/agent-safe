@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-02-25
+
+Commercial tier Phase D: Alert rules and SSO/OIDC authentication.
+
+### Added
+
+- **Alert rules**: Admins define alert conditions (risk_class, decision, event_type, action glob patterns) with configurable thresholds (N events in time window), cooldown periods, and notification channels (webhook, Slack). `POST /api/alerts/rules` creates rules; `GET/PUT/DELETE` for full CRUD. Soft-delete preserves audit history.
+
+- **Alert engine**: Ingested events are evaluated against active rules via `BackgroundTasks` — non-blocking, fires after the HTTP response. Matching events trigger webhook and/or Slack notifications using stdlib `urllib.request`. Alert history logged to `alert_history` table for audit.
+
+- **Alert history**: `GET /api/alerts/history` returns fired alerts with rule name, cluster ID, trigger event IDs, notification status (sent/failed), and error messages. Filterable by rule_id and cluster_id. Frontend auto-refreshes every 15 seconds.
+
+- **Threshold and cooldown**: Threshold rules (e.g., "5 critical denies in 10 minutes") use SQL COUNT with a composite index on `cluster_events(cluster_id, risk_class, decision, timestamp)`. In-memory cooldown cache with DB fallback (survives restart) prevents alert spam.
+
+- **SSO/OIDC authentication** (enterprise tier): OpenID Connect Authorization Code Flow using stdlib only — no new dependencies. Supports Google, Azure AD, Okta, Keycloak, Auth0, and any OIDC-compliant provider. Cached `.well-known/openid-configuration` discovery with 1-hour TTL.
+
+- **SSOService**: Generates state + nonce for CSRF protection (stored in `oidc_auth_states` table, 10-minute TTL, single-use). Exchanges authorization code at token endpoint, decodes id_token payload (safe per OIDC Core spec 3.1.3.7 — received over TLS from token endpoint), validates nonce/issuer/audience, auto-provisions local user from OIDC claims.
+
+- **SSO user provisioning**: Users provisioned by `external_id` (OIDC `sub` claim) with `auth_provider = "oidc"` and empty password hash/salt (SSO users cannot password-login). Username derived from email or name with collision suffix. Configurable default role via `AGENT_SAFE_DASHBOARD_OIDC_DEFAULT_ROLE`.
+
+- **SSO API endpoints**: `GET /api/auth/sso/config` (public SSO info for login page), `GET /api/auth/sso/authorize` (returns OIDC redirect URL), `POST /api/auth/sso/token` (exchanges code + state for JWT session), `GET /api/auth/sso/callback` (browser redirect fallback).
+
+- **Password auth toggle**: `AGENT_SAFE_DASHBOARD_PASSWORD_AUTH_ENABLED=false` disables password login when SSO is the sole auth method. `POST /api/auth/login` returns 403 when disabled. `GET /api/auth/tier` response extended with `sso_enabled` and `password_auth_enabled` fields.
+
+- **SQLite migration v4**: `alert_rules` and `alert_history` tables, composite index on `cluster_events` for threshold queries, `auth_provider` and `external_id` columns on `users`, `oidc_auth_states` table for CSRF state.
+
+- **Alerts dashboard page**: React page with two tabs — Rules (CRUD table with AlertRuleEditor form for conditions, thresholds, channels) and History (read-only table with status badges, auto-refresh). "Alerts" nav item in paid tier sidebar.
+
+- **SSO login page**: "Sign in with SSO" button when SSO is enabled. "or" divider between SSO and password form. Password form conditionally shown. SSOCallbackPage handles OIDC redirect and token exchange.
+
+- **54 new tests**: `test_alerts.py` (46 tests covering service CRUD, history, engine matching, evaluation, cooldown, notifications, API endpoints, tier gating) and SSO tests in `test_dashboard_auth.py` (8 tests covering SSO user creation, external_id lookup, password login prevention, default/custom roles, password_auth_disabled). Total: 1,363 tests.
+
+### Changed
+
+- **DashboardConfig**: 7 new OIDC fields — `oidc_provider_url`, `oidc_client_id`, `oidc_client_secret`, `oidc_default_role`, `oidc_enabled`, `password_auth_enabled`, `oidc_scopes`. All configurable via `AGENT_SAFE_DASHBOARD_*` env vars.
+
+- **AuthService**: New `create_sso_user()` and `get_user_by_external_id()` methods. `_row_to_user()` extracts `auth_provider` and `external_id` with backward-compatible fallback for pre-v4 schemas.
+
+- **Auth tier**: `"alerts"` feature added to team and enterprise tiers.
+
+- **Event ingestion**: `POST /api/clusters/ingest` now fires `AlertEngine.evaluate_batch()` as a background task when events are accepted.
+
+- Schema version bumped from 3 to 4.
+
+## [0.15.0] - 2026-02-25
+
+Commercial tier Phase C: Hosted policy sync and policy editor.
+
+### Added
+
+- **Managed policy service**: Full CRUD for centrally managed policies via `POST/GET/PUT/DELETE /api/policies/managed`. Policies stored in SQLite with priority, decision, reason, and match conditions (actions, targets, callers, risk_classes, require_ticket). Admin-only write access, authenticated read access.
+
+- **Policy publishing**: `POST /api/policies/publish` snapshots active managed policies into an immutable revision with notes and publisher tracking. `GET /api/policies/revisions` lists all published revisions.
+
+- **Policy bundle pull**: `GET /api/clusters/policy-bundle` authenticated via cluster API key (same as event ingestion). Returns the latest (or specific) published revision as a structured bundle. Records per-cluster sync status.
+
+- **Policy sync client** (`agent_safe.sync.policy_sync.PolicySyncClient`): Sidecars poll the dashboard for policy bundles, write to local YAML, and track the synced revision. Configurable poll interval, stdlib-only (`urllib.request`), zero new dependencies.
+
+- **Cluster sync status**: `GET /api/policies/sync-status` shows which clusters have synced and whether they're on the latest revision. Displayed in the dashboard Policies page.
+
+- **Policy editor frontend**: React component for creating and editing managed policies with match condition builder (actions, targets, callers, risk classes, ticket requirement), priority, decision, and reason fields.
+
+- **Policies page tabs**: Policies page split into three tabs — Local Rules (existing file-based), Managed Policies (CRUD table + editor), and Sync Status (cluster sync tracking with revision info).
+
+- **SQLite migration v3**: `managed_policies`, `policy_revisions`, and `cluster_sync_status` tables.
+
+- **59 new tests**: `test_managed_policies.py` (38 tests covering service CRUD, publishing, bundle, sync status, API endpoints) and `test_policy_sync.py` (21 tests covering sync client, bundle parsing, file writing, revision tracking). Total: 1,309 tests.
+
+### Changed
+
+- **Public exports**: New `PolicySyncClient` export from `agent_safe`.
+- Schema version bumped from 2 to 3.
+
 ## [0.14.0] - 2026-02-25
 
 Commercial tier Phase B: Multi-cluster registration and audit aggregation.

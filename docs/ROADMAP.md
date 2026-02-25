@@ -10,8 +10,8 @@ Phase 1.5         → Execution Tickets      (4-6 weeks)   ✅ COMPLETE
 Phase 2.1         → Delegation + Creds     (4 weeks)     ✅ COMPLETE
 Phase 2           → Change Control         (8-12 weeks)  ✅ COMPLETE
 Phase 2.5 (free)  → Dashboard + DX         (6-8 weeks)   ✅ COMPLETE
-Phase 2.5 (paid)  → Team/Org Features                   ← WE ARE HERE
-Phase 3           → Agent Supervisor       (separate product decision)
+Phase 2.5 (paid)  → Team/Org Features      (4 phases)    ✅ COMPLETE
+Phase 3           → Agent Supervisor       (separate product decision)  ← NEXT DECISION
 ```
 
 ---
@@ -121,17 +121,30 @@ Phase 3           → Agent Supervisor       (separate product decision)
   - [x] Trusted PyPI publishing via GitHub releases
   - [x] Cross-platform test portability (no hardcoded paths)
 
-### Paid Tier (next)
-**Status**: Not started
+### Paid Tier
+**Status**: Complete (v0.13.0–v0.16.0)
 
-- **Team/Org Features**:
-  - Multi-cluster policy management (push policies to multiple sidecars)
-  - Centralized audit aggregation (sidecars ship logs to dashboard)
-  - Role-based access to dashboard
-  - Compliance report generation (SOC2, ISO 27001 evidence)
-  - SSO integration
-- **Hosted Policy Sync**: Edit policies in the dashboard, sync to local sidecars.
-- **Alert Rules**: Define anomaly thresholds in the dashboard, push to sidecars.
+- [x] **Phase A — Auth + Compliance Reports** (v0.13.0):
+  - [x] JWT authentication (login, sessions, role-based access)
+  - [x] User management (admin CRUD, role assignment)
+  - [x] Compliance report generation (SOC2, ISO 27001 evidence)
+  - [x] Tier-based feature gating (free / team / enterprise)
+- [x] **Phase B — Multi-Cluster + Audit Aggregation** (v0.14.0):
+  - [x] Multi-cluster management (register, status, API key rotation)
+  - [x] Centralized audit aggregation (sidecars ship events via ingest API)
+  - [x] Cluster event timeline with search/filter
+  - [x] Dashboard summary stats across clusters
+- [x] **Phase C — Hosted Policy Sync + Policy Editor** (v0.15.0):
+  - [x] Managed policy CRUD (create, edit, version, activate/deactivate)
+  - [x] Policy sync protocol (sidecars pull policies from dashboard)
+  - [x] `PolicySyncClient` SDK for sidecar-side polling
+  - [x] Visual policy editor in dashboard UI
+- [x] **Phase D — Alert Rules + SSO** (v0.16.0):
+  - [x] Alert rules engine (conditions, thresholds, cooldowns, webhook/Slack notifications)
+  - [x] Alert history with notification status tracking
+  - [x] SSO via OIDC (Google, Azure AD, Okta, Keycloak, Auth0)
+  - [x] Auto-provisioning of SSO users with configurable default roles
+  - [x] Optional password auth disable when SSO is sole auth method
 
 **Business model**: Open-source core remains free. Dashboard + team features are the paid product. Pricing: per-agent or per-cluster.
 

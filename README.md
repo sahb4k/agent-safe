@@ -437,7 +437,7 @@ docker run -v ./myproject:/project -w /project agent-safe check restart-deployme
 
 ## Web Dashboard
 
-Agent-Safe includes a read-only governance dashboard for real-time visibility:
+Agent-Safe includes a governance dashboard with both free and paid tier features:
 
 ```bash
 pip install agent-safe[dashboard]
@@ -445,12 +445,21 @@ agent-safe dashboard
 # Opens at http://127.0.0.1:8420
 ```
 
-Pages:
+**Free tier pages:**
 - **Dashboard** -- overview stats, timeline chart, recent decisions
 - **Audit Log** -- filterable, paginated event table
 - **Actions** -- browse all 33 action definitions with risk badges
 - **Policies** -- priority-sorted rules with inventory match analysis
 - **Activity** -- live feed with 5s auto-refresh
+
+**Paid tier features** (set `AGENT_SAFE_DASHBOARD_TIER=team` or `enterprise`):
+- **Authentication** -- JWT login with RBAC (admin/editor/viewer), bootstrap admin user
+- **Multi-Cluster** -- register clusters, ingest events via API key, aggregated audit views
+- **Managed Policies** -- create/edit policies in the dashboard, publish revisions, sync to sidecars
+- **Alert Rules** -- define conditions, thresholds, cooldowns, and notification channels (webhook, Slack)
+- **Compliance Reports** -- generate SOC2 and ISO 27001 evidence reports from audit data
+- **User Management** -- admin CRUD for dashboard users
+- **SSO/OIDC** (enterprise) -- sign in via Google, Azure AD, Okta, or any OIDC provider
 
 For frontend development, use `--dev` to enable CORS for the Vite dev server:
 
@@ -506,11 +515,10 @@ bash infra/teardown.sh                       # Cleanup
 
 ## Project Status
 
-**Alpha** (v0.12.2) -- zero-config setup (`agent-safe.yaml` auto-discovery), core policy engine, SDK, CLI, audit log, K8s action catalogue (20 actions), AWS action catalogue (13 actions), execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket/incident linkage, before/after state capture, rollback pairing, Runner/Executor framework with DryRunExecutor, SubprocessExecutor, K8sExecutor, and AwsExecutor, web governance dashboard, GitHub Actions CI with trusted PyPI publishing, and integration test suite against real infrastructure. 1,102 unit tests + 27 integration tests.
+**v0.16.0** -- Full governance platform with free and paid tiers. Core: zero-config setup, policy engine, SDK, CLI, audit log, K8s (20 actions) and AWS (13 actions) catalogues, execution tickets, rate limiting, audit shipping, approval workflows, credential gating, multi-agent delegation, cumulative risk scoring, ticket linkage, state capture, rollback pairing, Runner/Executor framework (DryRun, Subprocess, K8s, AWS). Dashboard: auth + RBAC, multi-cluster management, managed policies with sync, alert rules with notifications, compliance reports, SSO/OIDC (enterprise). 1,363 unit tests + 27 integration tests.
 
 What's next:
-- Team/org features (paid tier)
-- Multi-cluster policy management
+- Agent Supervisor (Phase 3 — separate product decision)
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
 

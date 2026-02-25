@@ -77,15 +77,21 @@ agent-safe/
 ├── dashboard/
 │   ├── backend/            # FastAPI dashboard backend
 │   │   ├── app.py          # App factory
-│   │   ├── config.py       # DashboardConfig
+│   │   ├── config.py       # DashboardConfig (incl. OIDC settings)
 │   │   ├── schemas.py      # Pydantic response models
-│   │   ├── routers/        # API routers (audit, actions, policies, activity, health)
-│   │   └── services/       # Business logic (audit, action, policy, activity)
+│   │   ├── db/             # SQLite database + migrations
+│   │   ├── auth/           # JWT auth, user management, tier gating, SSO (OIDC)
+│   │   ├── alerts/         # Alert rules engine, models, service
+│   │   ├── clusters/       # Multi-cluster management + event ingestion
+│   │   ├── managed_policies/ # Hosted policy CRUD + sync protocol
+│   │   ├── routers/        # API routers (audit, actions, policies, activity, health, auth, sso, clusters, alerts)
+│   │   └── services/       # Business logic (audit, action, policy, activity, reports)
 │   └── frontend/           # React + TypeScript + Vite + Tailwind SPA
 │       ├── src/
 │       │   ├── api/        # API client + React Query hooks
-│       │   ├── pages/      # Dashboard, Audit, Actions, Policies, Activity
-│       │   └── components/ # Layout, StatsCard, RiskBadge, etc.
+│       │   ├── auth/       # AuthContext, LoginPage, SSOCallbackPage
+│       │   ├── pages/      # Dashboard, Audit, Actions, Policies, Activity, Clusters, Alerts, Reports, Users
+│       │   └── components/ # Layout, StatsCard, RiskBadge, AlertRuleEditor, etc.
 │       └── dist/           # Built frontend (served by FastAPI)
 ├── actions/                # YAML action definitions (K8s + AWS)
 ├── policies/               # Policy definitions
@@ -112,11 +118,10 @@ agent-safe/
 ## What NOT to Build Yet (Phase 3 and beyond)
 - No cloud infrastructure (sidecar/library only)
 - No agent supervisor (separate product decision)
-- No multi-cluster policy sync (Phase 2.5 paid tier)
 
 ## Documentation
 - `docs/MVP-PLAN.md` — 6–8 week detailed build plan (Phase 1)
-- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 ✅, Phase 2.5 in progress)
+- `docs/ROADMAP.md` — Full multi-phase roadmap (Phase 1 ✅, Phase 1.5 ✅, Phase 2.1 ✅, Phase 2 ✅, Phase 2.5 ✅)
 - `docs/ARCHITECTURE.md` — Architecture decisions and diagrams
 - `docs/GETTING-STARTED.md` — Installation, quick start, SDK usage, all features
 - `docs/CREDENTIAL-SCOPING.md` — Vault-based credential gating design (implemented)

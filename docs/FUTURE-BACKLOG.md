@@ -59,10 +59,13 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 **What**: Push audit logs to immutable external storage (S3 Object Lock, GCS retention lock, WORM).
 **Status**: Implemented. Pluggable `AuditShipper` protocol with three built-in backends: `FilesystemShipper`, `WebhookShipper` (stdlib), `S3Shipper` (optional boto3). Fire-and-forget after local write. CLI `agent-safe audit ship` for backfill.
 
-### Compliance Report Generation
+### ~~Compliance Report Generation~~ — COMPLETED (v0.13.0, Phase 2.5 Paid)
 **What**: Generate SOC2 / ISO 27001 evidence reports from audit logs. "Here's everything agents did, all decisions, all reasons."
-**Why cut**: Report formatting is not core IP. The data is there; report generation is a presentation layer.
-**When to reconsider**: Phase 2.5, as a paid dashboard feature.
+**Status**: Implemented as a paid dashboard feature. Reports page with SOC2 and ISO 27001 export, date range filtering, and per-cluster scoping.
+
+### ~~Alert Rules~~ — COMPLETED (v0.16.0, Phase 2.5 Paid)
+**What**: Define alert conditions in the dashboard (match on risk_class, decision, action patterns, event types). When ingested events match, fire notifications via webhook or Slack.
+**Status**: Implemented. Alert rules engine with configurable conditions, thresholds (N events in time window), cooldown periods, and webhook/Slack notification channels. Alert history logged for audit.
 
 ### SIEM/SOAR Integration
 **What**: Ship audit events to Splunk, Sentinel, XSOAR, etc.
@@ -83,10 +86,9 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 **Why cut**: Different execution model, different credential model, different risk profile than K8s.
 **When to reconsider**: Post-MVP, if design partners are managing legacy infrastructure.
 
-### Multi-Cluster Policy Sync
+### ~~Multi-Cluster Policy Sync~~ — COMPLETED (v0.14.0–v0.15.0, Phase 2.5 Paid)
 **What**: Manage policies centrally, push to multiple K8s clusters running agent-safe sidecars.
-**Why cut**: Requires a control plane (hosted service or hub-spoke model). Not needed for single-cluster MVP.
-**When to reconsider**: Phase 2.5, as part of the commercial dashboard.
+**Status**: Implemented. Multi-cluster management with centralized audit aggregation (v0.14.0). Hosted managed policies with `PolicySyncClient` SDK for sidecar-side polling (v0.15.0).
 
 ---
 
@@ -104,6 +106,14 @@ Items cut from MVP that are good ideas for later. Each entry includes why it was
 ### Time-Window Policies
 **What**: Policies that vary by time (e.g., "allow prod restarts only during maintenance windows").
 **Why cut from initial scope**: Actually, this IS in MVP scope — the PDP receives a timestamp and policies can match on time windows. Included in Phase 1a.
+
+---
+
+## Authentication & Identity
+
+### ~~SSO / OIDC Integration~~ — COMPLETED (v0.16.0, Phase 2.5 Paid)
+**What**: Enterprise SSO via OpenID Connect. Users authenticate via their identity provider (Google, Azure AD, Okta, Keycloak, Auth0).
+**Status**: Implemented. OIDC Authorization Code Flow (stdlib only, no authlib). Auto-provisioning of local accounts from OIDC claims. Configurable default role for SSO users. Optional password auth disable when SSO is the sole auth method. Enterprise tier only.
 
 ---
 

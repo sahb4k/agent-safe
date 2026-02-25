@@ -572,6 +572,93 @@ agent-safe test ./tests/
 
 All commands auto-discover `agent-safe.yaml`. Use `--registry`, `--policies`, etc. to override.
 
+## Web Dashboard
+
+Agent-Safe includes a web dashboard for visualizing audit logs, actions, policies, and agent activity.
+
+### Free Tier (read-only)
+
+```bash
+pip install agent-safe[dashboard]
+agent-safe dashboard
+```
+
+Opens a browser at `http://localhost:8000` with:
+- Audit log viewer (search, filter, timeline)
+- Action catalogue browser
+- Policy visualizer
+- Agent activity feed
+
+### Paid Tier (team / enterprise)
+
+The paid tier adds multi-cluster management, auth, reports, alert rules, and SSO. Configure via environment variables:
+
+```bash
+# Required for paid tier
+export AGENT_SAFE_DASHBOARD_TIER=team          # or "enterprise"
+export AGENT_SAFE_DASHBOARD_SIGNING_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+
+# Initial admin user (created on first boot)
+export AGENT_SAFE_DASHBOARD_ADMIN_USERNAME=admin
+export AGENT_SAFE_DASHBOARD_ADMIN_PASSWORD=changeme
+
+agent-safe dashboard
+```
+
+**Team tier features:**
+- JWT authentication with role-based access (admin / viewer)
+- User management (admin CRUD)
+- Multi-cluster management (register clusters, API key rotation)
+- Centralized audit aggregation (sidecars ship events via ingest API)
+- Compliance reports (SOC2, ISO 27001 evidence export)
+- Managed policies (create/edit/version policies, sync to sidecars)
+- Alert rules (conditions, thresholds, cooldowns, webhook/Slack notifications)
+
+**Enterprise tier adds:**
+- SSO via OIDC (Google, Azure AD, Okta, Keycloak, Auth0)
+- Auto-provisioning of SSO users with configurable default roles
+
+### SSO Configuration (Enterprise)
+
+```bash
+export AGENT_SAFE_DASHBOARD_TIER=enterprise
+export AGENT_SAFE_DASHBOARD_OIDC_ENABLED=true
+export AGENT_SAFE_DASHBOARD_OIDC_PROVIDER_URL=https://accounts.google.com
+export AGENT_SAFE_DASHBOARD_OIDC_CLIENT_ID=your-client-id
+export AGENT_SAFE_DASHBOARD_OIDC_CLIENT_SECRET=your-client-secret
+export AGENT_SAFE_DASHBOARD_OIDC_DEFAULT_ROLE=viewer
+
+# Optionally disable password auth when SSO is the sole auth method
+export AGENT_SAFE_DASHBOARD_PASSWORD_AUTH_ENABLED=false
+```
+
+### Alert Rules
+
+Alert rules let you get notified when critical events occur across your clusters. Configure in the dashboard UI:
+
+1. **Conditions**: Match on risk class (high, critical), decision (deny), event type, or action patterns (glob syntax)
+2. **Threshold**: "5 matching events in 10 minutes" or "every matching event" (threshold=1)
+3. **Channels**: Webhook URL and/or Slack webhook
+4. **Cooldown**: Minimum time between repeated alerts for the same rule (default 5 minutes)
+
+Alert history is logged and visible in the dashboard.
+
+### Policy Sync (Sidecar Integration)
+
+Sidecars can pull managed policies from the dashboard:
+
+```python
+from agent_safe import PolicySyncClient
+
+sync = PolicySyncClient(
+    dashboard_url="https://dashboard.example.com",
+    api_key="cluster-api-key",
+    policies_dir="./policies",
+    poll_interval=60,
+)
+sync.start()  # Polls for policy updates in a background thread
+```
+
 ## Next Steps
 
 - [Writing Actions](WRITING-ACTIONS.md) - define custom action definitions
